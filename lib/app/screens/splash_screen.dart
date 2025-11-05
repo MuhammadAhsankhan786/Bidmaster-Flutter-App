@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
+import '../services/storage_service.dart';
+import '../utils/role_guard.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -57,13 +59,19 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
 
-    _controller.forward().then((_) {
-      // Navigate to onboarding after animation completes
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) {
+    _controller.forward().then((_) async {
+      // Check for auto-login after animation completes
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (mounted) {
+        final isLoggedIn = await StorageService.isLoggedIn();
+        if (isLoggedIn) {
+          // User is logged in - router will handle role-based redirect
+          await RoleGuard.navigateByRole(context);
+        } else {
+          // No session - go to onboarding
           context.go('/onboarding');
         }
-      });
+      }
     });
   }
 

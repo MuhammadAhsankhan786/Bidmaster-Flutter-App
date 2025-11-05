@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../theme/colors.dart';
+import '../services/api_service.dart';
+import '../services/storage_service.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
   final String userRole;
@@ -50,31 +52,72 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     }
   }
 
-  void _handleSubmit() {
-    if (_formKey.currentState!.validate()) {
-      if (_nameController.text.isEmpty ||
-          _emailController.text.isEmpty ||
-          _cityController.text.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please fill in all required fields'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-        return;
-      }
+  Future<void> _handleSubmit() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
 
-      // Validate email
-      final emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
-      if (!emailRegex.hasMatch(_emailController.text)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please enter a valid email address'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-        return;
-      }
+    if (_nameController.text.isEmpty ||
+        _emailController.text.isEmpty ||
+        _cityController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill in all required fields'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    // Validate email
+    final emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+    if (!emailRegex.hasMatch(_emailController.text)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid email address'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    // Get phone from storage (from OTP verification)
+    final phone = await StorageService.getUserPhone();
+    if (phone == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Phone number not found. Please login again.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      context.go('/auth');
+      return;
+    }
+
+    // Show loading
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      // Generate a temporary password (user will need to set proper password later)
+      // For now, using phone number as temporary password
+      final tempPassword = phone.replaceAll(RegExp(r'[^\d]'), '');
+
+      // Register user with backend
+      await apiService.register(
+        name: _nameController.text,
+        phone: phone,
+        email: _emailController.text,
+        password: tempPassword, // TODO: Add password field or use phone as password
+        role: widget.userRole,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading dialog
 
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
@@ -90,6 +133,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       } else {
         context.go('/seller-dashboard');
       }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Close loading dialog
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to create profile: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
     }
   }
 

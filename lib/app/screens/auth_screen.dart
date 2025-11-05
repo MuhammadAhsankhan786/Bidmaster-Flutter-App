@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
+import '../services/api_service.dart';
+import '../services/storage_service.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -22,25 +24,18 @@ class _AuthScreenState extends State<AuthScreen> {
     6,
     (index) => FocusNode(),
   );
-  String _selectedCountryCode = '+91';
+  String _selectedCountryCode = '+964'; // Default to Iraq for backend compatibility
   bool _isLoading = false;
   bool _isPhoneValid = false;
   int _otpAttempts = 0;
+  String? _receivedOTP; // Store OTP from API response for auto-fill
+  String _normalizedPhone = ''; // Store normalized phone for verification
 
-  static const String _mockOTP = '123456';
   static const int _maxOTPAttempts = 5;
 
+  // Backend currently supports Iraq only - limiting to Iraq codes
   final List<CountryCode> _countryCodes = [
-    CountryCode(code: '+1', country: '🇺🇸 US/CA', maxLength: 10),
-    CountryCode(code: '+44', country: '🇬🇧 UK', maxLength: 10),
-    CountryCode(code: '+91', country: '🇮🇳 India', maxLength: 10),
-    CountryCode(code: '+86', country: '🇨🇳 China', maxLength: 11),
-    CountryCode(code: '+81', country: '🇯🇵 Japan', maxLength: 10),
-    CountryCode(code: '+49', country: '🇩🇪 Germany', maxLength: 11),
-    CountryCode(code: '+33', country: '🇫🇷 France', maxLength: 9),
-    CountryCode(code: '+34', country: '🇪🇸 Spain', maxLength: 9),
-    CountryCode(code: '+61', country: '🇦🇺 Australia', maxLength: 9),
-    CountryCode(code: '+55', country: '🇧🇷 Brazil', maxLength: 11),
+    CountryCode(code: '+964', country: '🇮🇶 Iraq', maxLength: 12), // +964 + 9-10 digits
   ];
 
   int get _maxPhoneLength {
@@ -82,9 +77,15 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _handlePhoneSubmit() async {
-    if (_phoneController.text.length != _maxPhoneLength) {
+    // Validate Iraq (+964) restriction
+    if (_selectedCountryCode != '+964') {
+      _showError('Invalid Country', 'Only Iraq (+964) numbers are allowed.');
+      return;
+    }
+
+    if (!_isPhoneValid) {
       _showError('Invalid phone number',
-          'Please enter a valid $_maxPhoneLength-digit phone number');
+          'Please enter a valid phone number');
       return;
     }
 
@@ -92,29 +93,81 @@ class _AuthScreenState extends State<AuthScreen> {
       _isLoading = true;
     });
 
-    // Simulate API call
-    await Future.delayed(const Duration(milliseconds: 1500));
-
-    setState(() {
-      _isLoading = false;
-      _currentStep = 1;
-    });
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Mock OTP sent: 123456'),
-          backgroundColor: AppColors.success,
-          duration: Duration(seconds: 3),
-        ),
-      );
+    try {
+      // Construct full phone number with country code
+      final fullPhone = '$_selectedCountryCode${_phoneController.text.replaceAll(RegExp(r'[^\d]'), '')}';
       
-      // Auto-fill OTP after 1 second (optional mock behavior)
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted && _currentStep == 1) {
-          _autoFillOTP();
+      // Additional validation: ensure it starts with +964
+      if (!fullPhone.startsWith('+964')) {
+        _showError('Invalid Phone Number', 'Only Iraq (+964) numbers are allowed.');
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+      
+      _normalizedPhone = fullPhone;
+
+      // 🧪 Test mode: Skip API call for test number
+      if (fullPhone == '+9640000000000') {
+        setState(() {
+          _isLoading = false;
+          _currentStep = 1;
+          _receivedOTP = '123456'; // Mock OTP for testing
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🧪 Test Mode: Using mock OTP 123456 (no API call).'),
+              backgroundColor: AppColors.warning,
+              duration: Duration(seconds: 3),
+            ),
+          );
+
+          // Auto-fill OTP after short delay
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted && _currentStep == 1) {
+              _autoFillOTP();
+            }
+          });
         }
+        return; // Skip API call
+      }
+
+      // Call API to send OTP (live mode)
+      final response = await apiService.sendOTP(fullPhone);
+
+      setState(() {
+        _isLoading = false;
+        _currentStep = 1;
+        // Store OTP from response for auto-fill (development only)
+        _receivedOTP = response['otp'] as String?;
       });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('OTP sent successfully to your phone.'),
+            backgroundColor: AppColors.success,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        
+        // Auto-fill OTP if provided (development/testing)
+        if (_receivedOTP != null && mounted) {
+          Future.delayed(const Duration(seconds: 1), () {
+            if (mounted && _currentStep == 1) {
+              _autoFillOTP();
+            }
+          });
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      _showError('Failed to send OTP', e.toString());
     }
   }
 
@@ -133,25 +186,73 @@ class _AuthScreenState extends State<AuthScreen> {
       _isLoading = true;
     });
 
-    // Simulate API call
-    await Future.delayed(const Duration(milliseconds: 1500));
+    try {
+      // 🧪 Test mode: Skip API call for test number with mock OTP
+      if (_normalizedPhone == '+9640000000000' && otp == '123456') {
+        setState(() {
+          _isLoading = false;
+        });
 
-    setState(() {
-      _isLoading = false;
-    });
+        if (mounted) {
+          // Save test phone number to storage
+          await StorageService.saveUserData(
+            userId: 0,
+            role: 'buyer',
+            phone: _normalizedPhone,
+          );
 
-    if (otp == _mockOTP) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Phone verified! Welcome to BidMaster'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-        context.go('/role-selection');
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Phone verified! Welcome to BidMaster'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+          context.go('/role-selection');
+        }
+        return; // Skip API call
       }
-    } else {
+
+      // Verify OTP with backend (live mode)
+      final response = await apiService.verifyOTP(_normalizedPhone, otp);
+
       setState(() {
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        // Check if user already exists (has profile)
+        // If token is returned, user exists or is new - navigate to role selection
+        if (response['token'] != null) {
+          // Save phone number to storage for profile setup
+          if (response['user'] != null && response['user']['phone'] != null) {
+            await StorageService.saveUserData(
+              userId: 0, // Will be set after registration
+              role: 'buyer', // Temporary, will be set in role selection
+              phone: response['user']['phone'] as String,
+            );
+          } else {
+            // Fallback: save normalized phone
+            await StorageService.saveUserData(
+              userId: 0,
+              role: 'buyer',
+              phone: _normalizedPhone,
+            );
+          }
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Phone verified! Welcome to BidMaster'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+          context.go('/role-selection');
+        } else {
+          _showError('Verification failed', 'Please try again');
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
         _otpAttempts++;
       });
 
@@ -159,25 +260,50 @@ class _AuthScreenState extends State<AuthScreen> {
         _showError('Too many failed attempts',
             'Please try again later or contact support');
       } else {
-        _showError('Incorrect OTP', 'Please try again');
+        _showError('Incorrect OTP', e.toString());
       }
     }
   }
 
-  void _handleResendOTP() {
+  Future<void> _handleResendOTP() async {
     setState(() {
       for (var controller in _otpControllers) {
         controller.clear();
       }
       _otpController.clear();
+      _isLoading = true;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-            'OTP resent! New code sent to $_selectedCountryCode ${_phoneController.text}'),
-        backgroundColor: AppColors.success,
-      ),
-    );
+
+    try {
+      final response = await apiService.sendOTP(_normalizedPhone);
+      setState(() {
+        _isLoading = false;
+        _receivedOTP = response['otp'] as String?;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('OTP sent successfully to your phone.'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+
+        // Auto-fill if OTP provided
+        if (_receivedOTP != null) {
+          Future.delayed(const Duration(seconds: 1), () {
+            if (mounted) {
+              _autoFillOTP();
+            }
+          });
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      _showError('Failed to resend OTP', e.toString());
+    }
   }
 
   void _showError(String title, String message) {
@@ -198,20 +324,25 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   void _autoFillOTP() {
+    if (_receivedOTP == null || _receivedOTP!.length != 6) return;
+    
     setState(() {
       for (int i = 0; i < 6; i++) {
-        if (i < _mockOTP.length) {
-          _otpControllers[i].text = _mockOTP[i];
+        if (i < _receivedOTP!.length) {
+          _otpControllers[i].text = _receivedOTP![i];
         }
       }
-      _otpController.text = _mockOTP;
+      _otpController.text = _receivedOTP!;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('OTP auto-filled. Click Verify & Continue to proceed'),
-        backgroundColor: AppColors.info,
-      ),
-    );
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('OTP auto-filled. Click Verify & Continue to proceed'),
+          backgroundColor: AppColors.info,
+        ),
+      );
+    }
   }
 
   @override
@@ -323,13 +454,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                     );
                   }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedCountryCode = value!;
-                      _phoneController.clear();
-                      _isPhoneValid = false;
-                    });
-                  },
+                  onChanged: null, // Disabled - only Iraq (+964) supported
                 ),
               ),
             ),
@@ -546,51 +671,6 @@ class _AuthScreenState extends State<AuthScreen> {
 
         const SizedBox(height: 24),
 
-        // Testing Helper
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.yellow50,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.yellow200),
-          ),
-          child: Column(
-            children: [
-              Text(
-                '🧪 Testing Mode: Use OTP $_mockOTP',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.yellow900,
-                      fontWeight: FontWeight.bold,
-                    ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                height: 36,
-                child: OutlinedButton(
-                  onPressed: _autoFillOTP,
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppColors.yellow300),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    'Auto-Fill OTP (Testing)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.yellow900,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
         // Resend OTP
         Center(
           child: TextButton(
@@ -643,28 +723,6 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
 
         const SizedBox(height: 12),
-
-        // Skip Button (Testing Only)
-        SizedBox(
-          height: 40,
-          child: TextButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('OTP Skipped (Testing Mode)'),
-                  backgroundColor: AppColors.success,
-                ),
-              );
-              context.go('/role-selection');
-            },
-            child: Text(
-              'Skip OTP Verification (Testing Only)',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 16),
 
         // Security Info
         Container(

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
 import '../widgets/countdown_timer.dart';
+import '../services/api_service.dart';
+import '../models/product_model.dart';
 
 class SellerDashboardScreen extends StatefulWidget {
   const SellerDashboardScreen({super.key});
@@ -11,65 +13,110 @@ class SellerDashboardScreen extends StatefulWidget {
 }
 
 class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
-  final List<StatData> _stats = [
-    StatData(
-      label: 'Total Earnings',
-      value: '\$24,850',
-      change: '+12.5%',
-      icon: Icons.attach_money,
-      gradientColors: [AppColors.green500, AppColors.green600],
-    ),
-    StatData(
-      label: 'Active Listings',
-      value: '8',
-      change: '2 ending soon',
-      icon: Icons.inventory_2,
-      gradientColors: [AppColors.blue500, AppColors.blue600],
-    ),
-    StatData(
-      label: 'Total Bids',
-      value: '347',
-      change: '+23 today',
-      icon: Icons.trending_up,
-      gradientColors: [AppColors.yellow500, AppColors.yellow600],
-    ),
-  ];
+  List<ProductModel> _products = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+  String _selectedStatus = 'all'; // all, pending, approved, sold
 
-  final List<ListingData> _listings = [
-    ListingData(
-      id: '1',
-      title: 'Vintage Rolex Submariner 1960s',
-      imageUrl:
-          'https://images.unsplash.com/photo-1680810897186-372717262131?w=400',
-      currentBid: 15000,
-      totalBids: 47,
-      views: 1234,
-      endTime: DateTime.now().add(const Duration(hours: 5)),
-      status: 'active',
-    ),
-    ListingData(
-      id: '2',
-      title: 'Classic Leica M3 Film Camera',
-      imageUrl:
-          'https://images.unsplash.com/photo-1495121553079-4c61bcce1894?w=400',
-      currentBid: 3200,
-      totalBids: 23,
-      views: 856,
-      endTime: DateTime.now().add(const Duration(hours: 12)),
-      status: 'active',
-    ),
-    ListingData(
-      id: '3',
-      title: 'Mid-Century Modern Eames Chair',
-      imageUrl:
-          'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400',
-      currentBid: 0,
-      totalBids: 0,
-      views: 0,
-      endTime: DateTime.now(),
-      status: 'pending',
-    ),
-  ];
+  List<StatData> get _stats {
+    final activeProducts = _products.where((p) => p.status == 'approved').length;
+    final pendingProducts = _products.where((p) => p.status == 'pending').length;
+    final totalBids = _products.fold<int>(0, (sum, p) => sum + (p.totalBids ?? 0));
+    final totalEarnings = _products
+        .where((p) => p.status == 'sold')
+        .fold<double>(0, (sum, p) => sum + (p.currentBid ?? p.startingPrice));
+
+    return [
+      StatData(
+        label: 'Total Earnings',
+        value: '\$${_formatCurrency(totalEarnings.toInt())}',
+        change: pendingProducts > 0 ? '$pendingProducts pending' : 'All approved',
+        icon: Icons.attach_money,
+        gradientColors: [AppColors.green500, AppColors.green600],
+      ),
+      StatData(
+        label: 'Active Listings',
+        value: '$activeProducts',
+        change: pendingProducts > 0 ? '$pendingProducts pending' : 'All active',
+        icon: Icons.inventory_2,
+        gradientColors: [AppColors.blue500, AppColors.blue600],
+      ),
+      StatData(
+        label: 'Total Bids',
+        value: '$totalBids',
+        change: 'Across all listings',
+        icon: Icons.trending_up,
+        gradientColors: [AppColors.yellow500, AppColors.yellow600],
+      ),
+    ];
+  }
+
+  List<ProductModel> get _filteredListings {
+    if (_selectedStatus == 'all') return _products;
+    return _products.where((p) => p.status == _selectedStatus).toList();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProducts();
+  }
+
+  Future<void> _loadProducts() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final products = await apiService.getMyProducts();
+      setState(() {
+        _products = products;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _formatCurrency(int amount) {
+    if (amount >= 1000) {
+      return '${(amount / 1000).toStringAsFixed(1)}K';
+    }
+    return amount.toString();
+  }
+
+  Widget _buildStatusFilter(String status, String label) {
+    final isSelected = _selectedStatus == status;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedStatus = status;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.blue600 : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? AppColors.blue600 : AppColors.slate300,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: isSelected ? Colors.white : AppColors.slate600,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -132,61 +179,127 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Stats Cards
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _stats.length,
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final stat = _stats[index];
-                        return _StatCard(stat: stat);
-                      },
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // My Listings Section
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'My Listings',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                    if (_isLoading && _products.isEmpty)
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(32.0),
+                          child: CircularProgressIndicator(),
                         ),
-                        TextButton(
-                          onPressed: () {},
-                          child: Text(
-                            'View All',
-                            style: TextStyle(color: AppColors.blue600),
+                      )
+                    else if (_errorMessage != null && _products.isEmpty)
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: Column(
+                            children: [
+                              Icon(Icons.error_outline, size: 48, color: AppColors.error),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Failed to load listings',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _errorMessage!,
+                                style: Theme.of(context).textTheme.bodySmall,
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: _loadProducts,
+                                child: const Text('Retry'),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
+                      )
+                    else ...[
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _stats.length,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final stat = _stats[index];
+                          return _StatCard(stat: stat);
+                        },
+                      ),
 
-                    const SizedBox(height: 16),
+                      const SizedBox(height: 24),
 
-                    // Listings
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _listings.length,
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final listing = _listings[index];
-                        return _ListingCard(
-                          listing: listing,
-                          onTap: listing.status == 'active'
-                              ? () {
-                                  // Navigate to active auction
-                                }
-                              : null,
-                        );
-                      },
-                    ),
+                      // My Listings Section
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'My Listings',
+                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                          ),
+                          // Status Filter
+                          Row(
+                            children: [
+                              _buildStatusFilter('all', 'All'),
+                              const SizedBox(width: 8),
+                              _buildStatusFilter('pending', 'Pending'),
+                              const SizedBox(width: 8),
+                              _buildStatusFilter('approved', 'Active'),
+                            ],
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Listings
+                      if (_filteredListings.isEmpty)
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(32.0),
+                            child: Column(
+                              children: [
+                                Icon(Icons.inbox_outlined, size: 48, color: AppColors.slate400),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No listings found',
+                                  style: Theme.of(context).textTheme.titleMedium,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Create your first listing to get started',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _filteredListings.length,
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final product = _filteredListings[index];
+                            final imageUrls = product.imageUrls;
+                            final imageUrl = imageUrls.isNotEmpty ? imageUrls.first : null;
+                            
+                            return _ListingCard(
+                              product: product,
+                              imageUrl: imageUrl ?? '',
+                              onTap: product.status == 'approved'
+                                  ? () {
+                                      context.go('/product-details/${product.id}');
+                                    }
+                                  : null,
+                            );
+                          },
+                        ),
+                    ],
 
                     const SizedBox(height: 16),
 
@@ -293,11 +406,13 @@ class _StatCard extends StatelessWidget {
 }
 
 class _ListingCard extends StatelessWidget {
-  final ListingData listing;
+  final ProductModel product;
+  final String imageUrl;
   final VoidCallback? onTap;
 
   const _ListingCard({
-    required this.listing,
+    required this.product,
+    required this.imageUrl,
     this.onTap,
   });
 
@@ -328,13 +443,15 @@ class _ListingCard extends StatelessWidget {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: Image.network(
-                  listing.imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Icon(Icons.image, size: 32);
-                  },
-                ),
+                child: imageUrl.isNotEmpty
+                    ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(Icons.image, size: 32);
+                        },
+                      )
+                    : const Icon(Icons.image, size: 32),
               ),
             ),
 
@@ -349,7 +466,7 @@ class _ListingCard extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          listing.title,
+                          product.title,
                           style: Theme.of(context).textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w600,
                               ),
@@ -357,7 +474,7 @@ class _ListingCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (listing.status == 'pending')
+                      if (product.status == 'pending')
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
@@ -379,7 +496,7 @@ class _ListingCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  if (listing.status == 'active')
+                  if (product.status == 'approved')
                     Column(
                       children: [
                         Row(
@@ -394,7 +511,7 @@ class _ListingCard extends StatelessWidget {
                                   ),
                             ),
                             Text(
-                              '\$${_formatCurrency(listing.currentBid)}',
+                              '\$${_formatCurrency((product.currentBid ?? product.startingBid ?? product.startingPrice).toInt())}',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
@@ -418,27 +535,7 @@ class _ListingCard extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  '${listing.totalBids}',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(
-                                        color: isDark
-                                            ? AppColors.textSecondaryDark
-                                            : AppColors.textSecondaryLight,
-                                      ),
-                                ),
-                                const SizedBox(width: 12),
-                                Icon(
-                                  Icons.visibility,
-                                  size: 14,
-                                  color: isDark
-                                      ? AppColors.textSecondaryDark
-                                      : AppColors.textSecondaryLight,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${listing.views}',
+                                  '${product.totalBids ?? 0}',
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodySmall
@@ -450,17 +547,20 @@ class _ListingCard extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            CountdownTimer(
-                              endTime: listing.endTime,
-                              size: CountdownSize.small,
-                            ),
+                            if (product.auctionEndTime != null)
+                              CountdownTimer(
+                                endTime: product.auctionEndTime!,
+                                size: CountdownSize.small,
+                              ),
                           ],
                         ),
                       ],
                     )
                   else
                     Text(
-                      'Awaiting admin approval',
+                      product.status == 'pending'
+                          ? 'Awaiting admin approval'
+                          : 'Status: ${product.status}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: isDark
                                 ? AppColors.textSecondaryDark
@@ -500,25 +600,5 @@ class StatData {
   });
 }
 
-class ListingData {
-  final String id;
-  final String title;
-  final String imageUrl;
-  final int currentBid;
-  final int totalBids;
-  final int views;
-  final DateTime endTime;
-  final String status;
-
-  ListingData({
-    required this.id,
-    required this.title,
-    required this.imageUrl,
-    required this.currentBid,
-    required this.totalBids,
-    required this.views,
-    required this.endTime,
-    required this.status,
-  });
-}
+// ListingData class removed - using ProductModel instead
 

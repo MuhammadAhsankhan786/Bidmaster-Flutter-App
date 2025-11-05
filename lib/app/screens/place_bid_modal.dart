@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/colors.dart';
+import '../services/api_service.dart';
 
 class PlaceBidModal extends StatefulWidget {
   final int currentBid;
   final String productTitle;
+  final int productId;
 
   const PlaceBidModal({
     super.key,
     required this.currentBid,
     required this.productTitle,
+    required this.productId,
   });
 
   @override
@@ -54,7 +57,7 @@ class _PlaceBidModalState extends State<PlaceBidModal>
   }
 
   Future<void> _handleSubmit() async {
-    final amount = int.tryParse(_bidController.text);
+    final amount = double.tryParse(_bidController.text);
     if (amount == null || amount < _minBid) {
       return;
     }
@@ -63,22 +66,40 @@ class _PlaceBidModalState extends State<PlaceBidModal>
       _isSubmitting = true;
     });
 
-    await Future.delayed(const Duration(milliseconds: 1500));
+    try {
+      await apiService.placeBid(
+        productId: widget.productId,
+        amount: amount,
+      );
 
-    setState(() {
-      _isSubmitting = false;
-      _isSuccess = true;
-    });
+      setState(() {
+        _isSubmitting = false;
+        _isSuccess = true;
+      });
 
-    await Future.delayed(const Duration(milliseconds: 2000));
+      await Future.delayed(const Duration(milliseconds: 2000));
 
-    if (mounted) {
-      Navigator.of(context).pop();
+      if (mounted) {
+        Navigator.of(context).pop(true); // Return true to indicate success
+      }
+    } catch (e) {
+      setState(() {
+        _isSubmitting = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to place bid: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
     }
   }
 
   bool get _isValidBid {
-    final amount = int.tryParse(_bidController.text);
+    final amount = double.tryParse(_bidController.text);
     return amount != null && amount >= _minBid;
   }
 

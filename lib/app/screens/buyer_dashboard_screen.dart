@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
 import '../widgets/product_card.dart';
+import '../services/api_service.dart';
+import '../models/product_model.dart';
 
 class BuyerDashboardScreen extends StatefulWidget {
   const BuyerDashboardScreen({super.key});
@@ -13,6 +15,11 @@ class BuyerDashboardScreen extends StatefulWidget {
 class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
   String _selectedCategory = 'All';
   final TextEditingController _searchController = TextEditingController();
+  List<ProductModel> _products = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+  int _currentPage = 1;
+  bool _hasMore = true;
 
   final List<String> _categories = [
     'All',
@@ -24,84 +31,86 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
     'Collectibles',
   ];
 
-  final List<ProductData> _products = [
-    ProductData(
-      id: '1',
-      title: 'Vintage Rolex Submariner 1960s Rare Edition',
-      imageUrl:
-          'https://images.unsplash.com/photo-1680810897186-372717262131?w=400',
-      currentBid: 15000,
-      totalBids: 47,
-      endTime: DateTime.now().add(const Duration(hours: 5)),
-      category: 'Watches',
-    ),
-    ProductData(
-      id: '2',
-      title: 'Classic Leica M3 Film Camera with Original Lens',
-      imageUrl:
-          'https://images.unsplash.com/photo-1495121553079-4c61bcce1894?w=400',
-      currentBid: 3200,
-      totalBids: 23,
-      endTime: DateTime.now().add(const Duration(hours: 12)),
-      category: 'Electronics',
-    ),
-    ProductData(
-      id: '3',
-      title: 'Limited Edition Nike Air Jordan 1 Retro High OG',
-      imageUrl:
-          'https://images.unsplash.com/photo-1625622176700-e55445383b85?w=400',
-      currentBid: 850,
-      totalBids: 89,
-      endTime: DateTime.now().add(const Duration(hours: 2)),
-      category: 'Fashion',
-    ),
-    ProductData(
-      id: '4',
-      title: 'Mid-Century Modern Eames Lounge Chair & Ottoman',
-      imageUrl:
-          'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400',
-      currentBid: 4500,
-      totalBids: 31,
-      endTime: DateTime.now().add(const Duration(hours: 24)),
-      category: 'Furniture',
-    ),
-    ProductData(
-      id: '5',
-      title: 'Original Abstract Oil Painting by Contemporary Artist',
-      imageUrl:
-          'https://images.unsplash.com/photo-1562040506-a9b32cb51b94?w=400',
-      currentBid: 2200,
-      totalBids: 18,
-      endTime: DateTime.now().add(const Duration(hours: 48)),
-      category: 'Art',
-    ),
-    ProductData(
-      id: '6',
-      title: 'Vintage Nintendo Game & Watch Donkey Kong Boxed',
-      imageUrl:
-          'https://images.unsplash.com/photo-1579304118856-9304f3d090d5?w=400',
-      currentBid: 580,
-      totalBids: 52,
-      endTime: DateTime.now().add(const Duration(hours: 6)),
-      category: 'Collectibles',
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadProducts();
+    _searchController.addListener(_onSearchChanged);
+  }
 
-  List<ProductData> get _filteredProducts {
-    return _products.where((product) {
-      final matchesCategory =
-          _selectedCategory == 'All' || product.category == _selectedCategory;
-      final matchesSearch = product.title
-          .toLowerCase()
-          .contains(_searchController.text.toLowerCase());
-      return matchesCategory && matchesSearch;
-    }).toList();
+  void _onSearchChanged() {
+    // Debounce search - reload after user stops typing
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (_searchController.text == _searchController.text) {
+        _loadProducts(reset: true);
+      }
+    });
+  }
+
+  Future<void> _loadProducts({bool reset = false}) async {
+    if (reset) {
+      setState(() {
+        _currentPage = 1;
+        _products = [];
+        _hasMore = true;
+      });
+    }
+
+    if (!_hasMore && !reset) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final result = await apiService.getAllProducts(
+        category: _selectedCategory == 'All' ? null : _selectedCategory,
+        search: _searchController.text.isEmpty ? null : _searchController.text,
+        page: _currentPage,
+        limit: 20,
+      );
+
+      final newProducts = result['products'] as List<ProductModel>;
+      final pagination = result['pagination'] as Map<String, dynamic>;
+
+      setState(() {
+        if (reset) {
+          _products = newProducts;
+        } else {
+          _products.addAll(newProducts);
+        }
+        _currentPage = pagination['page'] as int;
+        _hasMore = _currentPage < (pagination['pages'] as int);
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  List<ProductModel> get _filteredProducts {
+    // Backend already filters by category and search, but we can do client-side filtering if needed
+    return _products;
   }
 
   @override
   void dispose() {
+    _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onCategorySelected(String category) {
+    if (_selectedCategory != category) {
+      setState(() {
+        _selectedCategory = category;
+      });
+      _loadProducts(reset: true);
+    }
   }
 
   @override
@@ -216,9 +225,7 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
                               label: Text(category),
                               selected: isSelected,
                               onSelected: (selected) {
-                                setState(() {
-                                  _selectedCategory = category;
-                                });
+                                _onCategorySelected(category);
                               },
                               selectedColor: AppColors.blue600,
                               labelStyle: TextStyle(
@@ -288,27 +295,101 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
                     const SizedBox(height: 16),
 
                     // Product List
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _filteredProducts.length,
-                      separatorBuilder: (context, index) => const SizedBox(height: 16),
-                      itemBuilder: (context, index) {
-                        final product = _filteredProducts[index];
-                        return ProductCard(
-                          id: product.id,
-                          title: product.title,
-                          imageUrl: product.imageUrl,
-                          currentBid: product.currentBid,
-                          totalBids: product.totalBids,
-                          endTime: product.endTime,
-                          category: product.category,
-                          onTap: () {
-                            context.go('/product-details/${product.id}');
-                          },
-                        );
-                      },
-                    ),
+                    if (_isLoading && _products.isEmpty)
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(32.0),
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
+                    else if (_errorMessage != null && _products.isEmpty)
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: Column(
+                            children: [
+                              Icon(Icons.error_outline, size: 48, color: AppColors.error),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Failed to load products',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _errorMessage!,
+                                style: Theme.of(context).textTheme.bodySmall,
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: () => _loadProducts(reset: true),
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else if (_filteredProducts.isEmpty)
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: Column(
+                            children: [
+                              Icon(Icons.inbox_outlined, size: 48, color: AppColors.slate400),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No products found',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Try adjusting your search or filters',
+                                style: Theme.of(context).textTheme.bodySmall,
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _filteredProducts.length + (_hasMore ? 1 : 0),
+                        separatorBuilder: (context, index) => const SizedBox(height: 16),
+                        itemBuilder: (context, index) {
+                          if (index == _filteredProducts.length) {
+                            // Load more indicator
+                            if (!_isLoading) {
+                              _loadProducts();
+                            }
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: CircularProgressIndicator(),
+                              ),
+                            );
+                          }
+                          
+                          final product = _filteredProducts[index];
+                          // Get first image URL or use placeholder
+                          final imageUrls = product.imageUrls;
+                          final imageUrl = imageUrls.isNotEmpty ? imageUrls.first : null;
+                          
+                          return ProductCard(
+                            id: product.id.toString(),
+                            title: product.title,
+                            imageUrl: imageUrl ?? '',
+                            currentBid: (product.currentBid ?? product.startingBid ?? product.startingPrice).toInt(),
+                            totalBids: product.totalBids ?? 0,
+                            endTime: product.auctionEndTime ?? DateTime.now().add(const Duration(days: 7)),
+                            category: product.categoryName,
+                            onTap: () {
+                              context.go('/product-details/${product.id}');
+                            },
+                          );
+                        },
+                      ),
                   ],
                 ),
               ),
@@ -373,23 +454,5 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class ProductData {
-  final String id;
-  final String title;
-  final String imageUrl;
-  final int currentBid;
-  final int totalBids;
-  final DateTime endTime;
-  final String category;
-
-  ProductData({
-    required this.id,
-    required this.title,
-    required this.imageUrl,
-    required this.currentBid,
-    required this.totalBids,
-    required this.endTime,
-    required this.category,
-  });
-}
+// ProductData class removed - using ProductModel instead
 
