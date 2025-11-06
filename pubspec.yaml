@@ -31,11 +31,12 @@ flutter:
     - assets/images/
     - assets/icons/
     - assets/lottie/
+    - assets/fonts/
 
   fonts:
     - family: Poppins
       fonts:
-        - asset: fonts/Poppins-Regular.ttf
-        - asset: fonts/Poppins-Medium.ttf
-        - asset: fonts/Poppins-SemiBold.ttf
-        - asset: fonts/Poppins-Bold.ttf
+        - asset: assets/fonts/Poppins-Regular.ttf
+        - asset: assets/fonts/Poppins-Medium.ttf
+        - asset: assets/fonts/Poppins-SemiBold.ttf
+        - asset: assets/fonts/Poppins-Bold.ttf

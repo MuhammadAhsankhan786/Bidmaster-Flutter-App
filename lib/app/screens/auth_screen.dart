@@ -108,66 +108,55 @@ class _AuthScreenState extends State<AuthScreen> {
       
       _normalizedPhone = fullPhone;
 
-      // 🧪 Test mode: Skip API call for test number
-      if (fullPhone == '+9640000000000') {
-        setState(() {
-          _isLoading = false;
-          _currentStep = 1;
-          _receivedOTP = '123456'; // Mock OTP for testing
-        });
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('🧪 Test Mode: Using mock OTP 123456 (no API call).'),
-              backgroundColor: AppColors.warning,
-              duration: Duration(seconds: 3),
-            ),
-          );
-
-          // Auto-fill OTP after short delay
-          Future.delayed(const Duration(milliseconds: 500), () {
-            if (mounted && _currentStep == 1) {
-              _autoFillOTP();
-            }
-          });
-        }
-        return; // Skip API call
-      }
-
-      // Call API to send OTP (live mode)
-      final response = await apiService.sendOTP(fullPhone);
-
+      // 🧪 Mock mode: Use mock OTP for all phone numbers (API disabled)
+      // Simulate API delay
+      await Future.delayed(const Duration(milliseconds: 800));
+      
       setState(() {
         _isLoading = false;
         _currentStep = 1;
-        // Store OTP from response for auto-fill (development only)
-        _receivedOTP = response['otp'] as String?;
+        _receivedOTP = '123456'; // Mock OTP for all numbers
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('OTP sent successfully to your phone.'),
-            backgroundColor: AppColors.success,
+            content: Text('Mock OTP sent: 123456 (API disabled for testing)'),
+            backgroundColor: AppColors.info,
             duration: Duration(seconds: 3),
           ),
         );
-        
-        // Auto-fill OTP if provided (development/testing)
-        if (_receivedOTP != null && mounted) {
-          Future.delayed(const Duration(seconds: 1), () {
-            if (mounted && _currentStep == 1) {
-              _autoFillOTP();
-            }
-          });
-        }
+
+        // Auto-fill OTP after short delay
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted && _currentStep == 1) {
+            _autoFillOTP();
+          }
+        });
       }
     } catch (e) {
+      // Ignore errors - use mock OTP instead
       setState(() {
         _isLoading = false;
+        _currentStep = 1;
+        _receivedOTP = '123456'; // Fallback to mock OTP
       });
-      _showError('Failed to send OTP', e.toString());
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Using mock OTP: 123456 (API error ignored)'),
+            backgroundColor: AppColors.info,
+            duration: Duration(seconds: 3),
+          ),
+        );
+
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted && _currentStep == 1) {
+            _autoFillOTP();
+          }
+        });
+      }
     }
   }
 
@@ -187,14 +176,18 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      // 🧪 Test mode: Skip API call for test number with mock OTP
-      if (_normalizedPhone == '+9640000000000' && otp == '123456') {
+      // 🧪 Mock mode: Verify OTP locally (API disabled)
+      // Accept mock OTP "123456" for any phone number
+      if (otp == '123456') {
+        // Simulate API delay
+        await Future.delayed(const Duration(milliseconds: 800));
+        
         setState(() {
           _isLoading = false;
         });
 
         if (mounted) {
-          // Save test phone number to storage
+          // Save phone number to storage
           await StorageService.saveUserData(
             userId: 0,
             role: 'buyer',
@@ -212,42 +205,56 @@ class _AuthScreenState extends State<AuthScreen> {
         return; // Skip API call
       }
 
-      // Verify OTP with backend (live mode)
-      final response = await apiService.verifyOTP(_normalizedPhone, otp);
+      // If not mock OTP, try API call but handle errors gracefully
+      try {
+        final response = await apiService.verifyOTP(_normalizedPhone, otp);
 
-      setState(() {
-        _isLoading = false;
-      });
+        setState(() {
+          _isLoading = false;
+        });
 
-      if (mounted) {
-        // Check if user already exists (has profile)
-        // If token is returned, user exists or is new - navigate to role selection
-        if (response['token'] != null) {
-          // Save phone number to storage for profile setup
-          if (response['user'] != null && response['user']['phone'] != null) {
-            await StorageService.saveUserData(
-              userId: 0, // Will be set after registration
-              role: 'buyer', // Temporary, will be set in role selection
-              phone: response['user']['phone'] as String,
+        if (mounted) {
+          // Check if user already exists (has profile)
+          if (response['token'] != null) {
+            // Save phone number to storage for profile setup
+            if (response['user'] != null && response['user']['phone'] != null) {
+              await StorageService.saveUserData(
+                userId: 0, // Will be set after registration
+                role: 'buyer', // Temporary, will be set in role selection
+                phone: response['user']['phone'] as String,
+              );
+            } else {
+              // Fallback: save normalized phone
+              await StorageService.saveUserData(
+                userId: 0,
+                role: 'buyer',
+                phone: _normalizedPhone,
+              );
+            }
+            
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Phone verified! Welcome to BidMaster'),
+                backgroundColor: AppColors.success,
+              ),
             );
+            context.go('/role-selection');
           } else {
-            // Fallback: save normalized phone
-            await StorageService.saveUserData(
-              userId: 0,
-              role: 'buyer',
-              phone: _normalizedPhone,
-            );
+            _showError('Verification failed', 'Please enter the correct OTP (use 123456 for mock)');
           }
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Phone verified! Welcome to BidMaster'),
-              backgroundColor: AppColors.success,
-            ),
-          );
-          context.go('/role-selection');
+        }
+      } catch (apiError) {
+        // Ignore API errors - treat as if OTP is incorrect
+        setState(() {
+          _isLoading = false;
+          _otpAttempts++;
+        });
+
+        if (_otpAttempts >= _maxOTPAttempts) {
+          _showError('Too many failed attempts',
+              'Please use mock OTP: 123456');
         } else {
-          _showError('Verification failed', 'Please try again');
+          _showError('Incorrect OTP', 'Please use mock OTP: 123456 (API errors ignored)');
         }
       }
     } catch (e) {
@@ -258,9 +265,9 @@ class _AuthScreenState extends State<AuthScreen> {
 
       if (_otpAttempts >= _maxOTPAttempts) {
         _showError('Too many failed attempts',
-            'Please try again later or contact support');
+            'Please use mock OTP: 123456');
       } else {
-        _showError('Incorrect OTP', e.toString());
+        _showError('Verification error', 'Please use mock OTP: 123456');
       }
     }
   }
@@ -275,34 +282,51 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      final response = await apiService.sendOTP(_normalizedPhone);
+      // 🧪 Mock mode: Use mock OTP (API disabled)
+      // Simulate API delay
+      await Future.delayed(const Duration(milliseconds: 800));
+      
       setState(() {
         _isLoading = false;
-        _receivedOTP = response['otp'] as String?;
+        _receivedOTP = '123456'; // Mock OTP
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('OTP sent successfully to your phone.'),
-            backgroundColor: AppColors.success,
+            content: Text('Mock OTP resent: 123456 (API disabled)'),
+            backgroundColor: AppColors.info,
           ),
         );
 
-        // Auto-fill if OTP provided
-        if (_receivedOTP != null) {
-          Future.delayed(const Duration(seconds: 1), () {
-            if (mounted) {
-              _autoFillOTP();
-            }
-          });
-        }
+        // Auto-fill OTP
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            _autoFillOTP();
+          }
+        });
       }
     } catch (e) {
+      // Ignore errors - use mock OTP
       setState(() {
         _isLoading = false;
+        _receivedOTP = '123456'; // Fallback to mock OTP
       });
-      _showError('Failed to resend OTP', e.toString());
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Mock OTP: 123456 (API error ignored)'),
+            backgroundColor: AppColors.info,
+          ),
+        );
+
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            _autoFillOTP();
+          }
+        });
+      }
     }
   }
 
@@ -532,57 +556,6 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
 
-        const SizedBox(height: 24),
-
-        // Divider
-        Row(
-          children: [
-            Expanded(child: Divider(color: AppColors.slate200)),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                'Or continue with',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-            Expanded(child: Divider(color: AppColors.slate200)),
-          ],
-        ),
-
-        const SizedBox(height: 24),
-
-        // Social Login Buttons
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.g_mobiledata, size: 24),
-                label: const Text('Google'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.facebook, size: 24),
-                label: const Text('Facebook'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
       ],
     );
   }

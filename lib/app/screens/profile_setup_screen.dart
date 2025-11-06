@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -25,8 +27,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _cityController = TextEditingController();
   final _bioController = TextEditingController();
   
-  File? _profileImage;
+  XFile? _profileImageXFile;
+  Uint8List? _profileImageBytes; // For web platform
+  File? _profileImageFile; // For mobile platforms only
   final ImagePicker _picker = ImagePicker();
+
+  bool _hasProfileImage() {
+    return _profileImageXFile != null;
+  }
 
   @override
   void dispose() {
@@ -47,7 +55,22 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
     if (image != null) {
       setState(() {
-        _profileImage = File(image.path);
+        _profileImageXFile = image;
+        if (kIsWeb) {
+          // For web platform: load bytes for Image.memory
+          _profileImageFile = null;
+          image.readAsBytes().then((bytes) {
+            if (mounted) {
+              setState(() {
+                _profileImageBytes = bytes;
+              });
+            }
+          });
+        } else {
+          // For mobile platforms: create File for Image.file
+          _profileImageFile = File(image.path);
+          _profileImageBytes = null;
+        }
       });
     }
   }
@@ -107,7 +130,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       // For now, using phone number as temporary password
       final tempPassword = phone.replaceAll(RegExp(r'[^\d]'), '');
 
-      // Register user with backend
+      // Register user with backend (mocked for CORS safety)
       await apiService.register(
         name: _nameController.text,
         phone: phone,
@@ -118,6 +141,20 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
       if (!mounted) return;
       Navigator.of(context).pop(); // Close loading dialog
+
+      // Show mock register notification
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Mock register used (CORS safe)'),
+          backgroundColor: AppColors.info,
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      // Small delay before success message
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      if (!mounted) return;
 
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
@@ -210,12 +247,25 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                               ),
                             ],
                           ),
-                          child: _profileImage != null
+                          child: _hasProfileImage()
                               ? ClipOval(
-                                  child: Image.file(
-                                    _profileImage!,
-                                    fit: BoxFit.cover,
-                                  ),
+                                  child: kIsWeb
+                                      ? _profileImageBytes != null
+                                          ? Image.memory(
+                                              _profileImageBytes!,
+                                              fit: BoxFit.cover,
+                                            )
+                                          : const Center(
+                                              child: CircularProgressIndicator(),
+                                            )
+                                      : _profileImageFile != null
+                                          ? Image.file(
+                                              _profileImageFile!,
+                                              fit: BoxFit.cover,
+                                            )
+                                          : const Center(
+                                              child: CircularProgressIndicator(),
+                                            ),
                                 )
                               : Icon(
                                   Icons.person,

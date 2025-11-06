@@ -51,13 +51,35 @@ class ProductModel {
     // Parse seller information from nested object or flat fields
     final seller = json['seller'] as Map<String, dynamic>? ?? {};
     
+    // Safely parse starting_price with fallback
+    final startingPriceValue = json['starting_price'] ?? json['starting_bid'] ?? 0.0;
+    final startingPrice = (startingPriceValue is num) 
+        ? startingPriceValue.toDouble() 
+        : (double.tryParse(startingPriceValue.toString()) ?? 0.0);
+    
+    // Safely parse auction_end_time
+    DateTime? auctionEndTime;
+    if (json['auction_end_time'] != null) {
+      try {
+        final timeValue = json['auction_end_time'];
+        if (timeValue is String) {
+          auctionEndTime = DateTime.parse(timeValue);
+        } else if (timeValue is DateTime) {
+          auctionEndTime = timeValue;
+        }
+      } catch (e) {
+        print('Warning: Failed to parse auction_end_time: ${json['auction_end_time']}');
+        auctionEndTime = null;
+      }
+    }
+    
     return ProductModel(
       id: json['id'] as int,
       sellerId: json['seller_id'] as int?,
-      title: json['title'] as String,
+      title: json['title'] as String? ?? 'Untitled Product',
       description: json['description'] as String?,
       imageUrl: json['image_url'] as String?,
-      startingPrice: (json['starting_price'] as num).toDouble(),
+      startingPrice: startingPrice,
       startingBid: json['starting_bid'] != null
           ? (json['starting_bid'] as num).toDouble()
           : null,
@@ -67,10 +89,8 @@ class ProductModel {
       currentBid: json['current_bid'] != null
           ? (json['current_bid'] as num).toDouble()
           : null,
-      status: json['status'] as String,
-      auctionEndTime: json['auction_end_time'] != null
-          ? DateTime.parse(json['auction_end_time'] as String)
-          : null,
+      status: json['status'] as String? ?? 'pending',
+      auctionEndTime: auctionEndTime,
       totalBids: json['total_bids'] as int? ?? 0,
       highestBidderId: json['highest_bidder_id'] as int?,
       categoryId: json['category_id'] as int?,
@@ -80,7 +100,9 @@ class ProductModel {
       categoryName: json['category_name'] as String?,
       highestBidderName: json['highest_bidder_name'] as String?,
       hoursLeft: json['hours_left'] != null
-          ? (json['hours_left'] as num).toDouble()
+          ? (json['hours_left'] is num 
+              ? (json['hours_left'] as num).toDouble() 
+              : double.tryParse(json['hours_left'].toString()) ?? null)
           : null,
       auctionStatus: json['auction_status'] as String?,
     );
