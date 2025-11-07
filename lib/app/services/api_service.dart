@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/user_model.dart';
 import '../models/product_model.dart';
 import '../models/bid_model.dart';
@@ -6,11 +7,25 @@ import '../models/notification_model.dart';
 import 'storage_service.dart';
 
 class ApiService {
-  static const String baseUrl = 'https://bidmaster-api.onrender.com/api';
+  // Use local backend for development (web) to avoid CORS issues
+  // Use production backend for mobile apps and production builds
+  static String get baseUrl {
+    if (kIsWeb) {
+      // For web development, use local backend to avoid CORS
+      // Change this to your local backend URL if different
+      return 'http://localhost:5000/api';
+    }
+    // For mobile apps, use production API
+    return 'https://bidmaster-api.onrender.com/api';
+  }
   
   late Dio _dio;
 
   ApiService() {
+    print('🌐 API Service initialized');
+    print('   Platform: ${kIsWeb ? "Web" : "Mobile"}');
+    print('   Base URL: $baseUrl');
+    
     _dio = Dio(BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 30),
