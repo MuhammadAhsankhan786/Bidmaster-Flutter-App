@@ -31,12 +31,23 @@ class BidModel {
     this.auctionStatus,
   });
 
+  // Helper function to safely parse numeric values
+  static double? _parseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    if (value is String) {
+      final parsed = double.tryParse(value);
+      return parsed;
+    }
+    return double.tryParse(value.toString());
+  }
+
   factory BidModel.fromJson(Map<String, dynamic> json) {
     return BidModel(
       id: json['id'] as int,
       productId: json['product_id'] as int,
       userId: json['user_id'] as int,
-      amount: (json['amount'] as num).toDouble(),
+      amount: _parseDouble(json['amount']) ?? 0.0,
       createdAt: DateTime.parse(json['created_at'] as String),
       bidderName: json['bidder_name'] as String?,
       bidderEmail: json['bidder_email'] as String?,
@@ -47,9 +58,7 @@ class BidModel {
       auctionEndTime: json['auction_end_time'] != null
           ? DateTime.parse(json['auction_end_time'] as String)
           : null,
-      hoursLeft: json['hours_left'] != null
-          ? (json['hours_left'] as num).toDouble()
-          : null,
+      hoursLeft: _parseDouble(json['hours_left']),
       auctionStatus: json['auction_status'] as String?,
     );
   }

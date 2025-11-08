@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
+import '../../config/dev_config.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -17,11 +19,11 @@ class _AuthScreenState extends State<AuthScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _otpController = TextEditingController();
   final List<TextEditingController> _otpControllers = List.generate(
-    6,
+    4,
     (index) => TextEditingController(),
   );
   final List<FocusNode> _otpFocusNodes = List.generate(
-    6,
+    4,
     (index) => FocusNode(),
   );
   String _selectedCountryCode = '+964'; // Default to Iraq for backend compatibility
@@ -64,6 +66,88 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    
+    // Auto-login for development mode
+    if (AUTO_LOGIN_ENABLED) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _performAutoLogin();
+      });
+    }
+  }
+
+  /// Auto-login function (development mode)
+  Future<void> _performAutoLogin() async {
+    if (!mounted) return;
+    
+    final String devPhone = DEV_PHONES[DEFAULT_DEV_INDEX];
+    
+    print('🚀 AUTO LOGIN ENABLED - Development Mode');
+    print('   Phone: $devPhone');
+    print('   OTP: $DEFAULT_DEV_OTP');
+    
+    // Extract phone digits (remove +964 prefix)
+    String phoneDigits = devPhone.replaceAll(RegExp(r'[^\d]'), '');
+    if (phoneDigits.startsWith('964')) {
+      phoneDigits = phoneDigits.substring(3); // Remove '964' prefix
+    }
+    
+    // Set phone number in controller
+    setState(() {
+      _phoneController.text = phoneDigits;
+      _normalizedPhone = devPhone;
+      _isPhoneValid = true;
+    });
+    
+    // Validate phone
+    _validatePhoneNumber();
+    
+    // Simulate phone submit delay
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    if (!mounted) return;
+    
+    // Move to OTP screen
+    setState(() {
+      _currentStep = 1;
+      _receivedOTP = DEFAULT_DEV_OTP;
+    });
+    
+    // Auto-fill OTP after short delay
+    await Future.delayed(const Duration(milliseconds: 300));
+    
+    if (!mounted) return;
+    
+    // Auto-fill OTP fields
+    setState(() {
+      for (int i = 0; i < 4 && i < DEFAULT_DEV_OTP.length; i++) {
+        _otpControllers[i].text = DEFAULT_DEV_OTP[i];
+      }
+      _otpController.text = DEFAULT_DEV_OTP;
+    });
+    
+    // Show info message
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('🚀 Auto login (Dev Mode)'),
+          backgroundColor: AppColors.info,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+    
+    // Auto-verify after short delay
+    await Future.delayed(const Duration(milliseconds: 1000));
+    
+    if (!mounted) return;
+    
+    // Trigger login automatically
+    await _handleOTPVerify();
+  }
+
+  @override
   void dispose() {
     _phoneController.dispose();
     _otpController.dispose();
@@ -95,7 +179,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
     try {
       // Construct full phone number with country code
-      final fullPhone = '$_selectedCountryCode${_phoneController.text.replaceAll(RegExp(r'[^\d]'), '')}';
+      final phoneDigits = _phoneController.text.replaceAll(RegExp(r'[^\d]'), '');
+      final fullPhone = '$_selectedCountryCode$phoneDigits';
       
       // Additional validation: ensure it starts with +964
       if (!fullPhone.startsWith('+964')) {
@@ -106,56 +191,60 @@ class _AuthScreenState extends State<AuthScreen> {
         return;
       }
       
+      // Validate phone length (Iraq format: +964 + 9-10 digits)
+      if (phoneDigits.length < 9 || phoneDigits.length > 10) {
+        _showError('Invalid Phone Number', 'Phone number must be 9-10 digits after +964');
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+      
       _normalizedPhone = fullPhone;
+      print('📱 Phone normalized: $_normalizedPhone');
 
-      // 🧪 Mock mode: Use mock OTP for all phone numbers (API disabled)
-      // Simulate API delay
-      await Future.delayed(const Duration(milliseconds: 800));
+      // Call actual sendOTP API
+      final otpResponse = await apiService.sendOTP(_normalizedPhone);
       
       setState(() {
         _isLoading = false;
         _currentStep = 1;
-        _receivedOTP = '123456'; // Mock OTP for all numbers
+        // Get OTP from API response (backend returns OTP in response for development)
+        _receivedOTP = otpResponse['otp']?.toString() ?? '';
       });
 
       if (mounted) {
+        final otpMessage = _receivedOTP.isNotEmpty 
+            ? 'OTP sent: $_receivedOTP'
+            : 'OTP sent to your phone';
+        
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Mock OTP sent: 123456 (API disabled for testing)'),
+          SnackBar(
+            content: Text(otpMessage),
             backgroundColor: AppColors.info,
-            duration: Duration(seconds: 3),
+            duration: const Duration(seconds: 3),
           ),
         );
 
-        // Auto-fill OTP after short delay
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted && _currentStep == 1) {
-            _autoFillOTP();
-          }
-        });
+        // Auto-fill OTP after short delay if OTP is available
+        if (_receivedOTP.isNotEmpty) {
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted && _currentStep == 1) {
+              _autoFillOTP();
+            }
+          });
+        }
       }
     } catch (e) {
-      // Ignore errors - use mock OTP instead
       setState(() {
         _isLoading = false;
-        _currentStep = 1;
-        _receivedOTP = '123456'; // Fallback to mock OTP
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Using mock OTP: 123456 (API error ignored)'),
-            backgroundColor: AppColors.info,
-            duration: Duration(seconds: 3),
-          ),
-        );
-
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted && _currentStep == 1) {
-            _autoFillOTP();
-          }
-        });
+        final errorMsg = e.toString().contains('404')
+            ? 'Phone number not registered. Please contact administrator.'
+            : 'Failed to send OTP. Please try again.';
+        _showError('OTP Error', errorMsg);
       }
     }
   }
@@ -166,8 +255,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _handleOTPVerify() async {
     final otp = _enteredOTP;
-    if (otp.length != 6) {
-      _showError('Invalid OTP', 'Please enter the complete 6-digit OTP');
+    if (otp.length != 4) {
+      _showError('Invalid OTP', 'Please enter the 4-digit OTP');
       return;
     }
 
@@ -176,85 +265,110 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      // 🧪 Mock mode: Verify OTP locally (API disabled)
-      // Accept mock OTP "123456" for any phone number
-      if (otp == '123456') {
-        // Simulate API delay
-        await Future.delayed(const Duration(milliseconds: 800));
-        
-        setState(() {
-          _isLoading = false;
-        });
+      // Use /api/auth/login-phone endpoint
+      final response = await apiService.loginPhone(
+        phone: _normalizedPhone,
+        otp: otp,
+      );
 
-        if (mounted) {
-          // Save phone number to storage
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        if (response['success'] == true && response['token'] != null) {
+          final user = response['user'];
+          // Extract role from response (backend returns role at top level and in user object)
+          final role = (response['role'] ?? user['role'] ?? 'buyer').toString().toLowerCase();
+          
+          print('✅ Login successful - Token saved');
+          print('🧠 Role detected: $role');
+          print('   User ID: ${user['id']}');
+          print('   User Name: ${user['name'] ?? 'N/A'}');
+          print('   User Email: ${user['email'] ?? 'N/A'}');
+          
+          // Verify token was saved
+          final savedToken = await StorageService.getToken();
+          if (savedToken == null) {
+            print('⚠️ Warning: Token not found in storage, saving again...');
+            await StorageService.saveToken(response['token'] as String);
+          }
+          
+          // Save user data (ensure role is saved correctly)
           await StorageService.saveUserData(
-            userId: 0,
-            role: 'buyer',
-            phone: _normalizedPhone,
+            userId: user['id'] as int,
+            role: role,
+            phone: user['phone'] as String,
+            name: user['name'] as String?,
+            email: user['email'] as String?,
           );
+          
+          // Verify role was saved
+          final savedRole = await StorageService.getUserRole();
+          print('   Verified saved role: $savedRole');
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Phone verified! Welcome to BidMaster'),
-              backgroundColor: AppColors.success,
-            ),
-          );
-          context.go('/role-selection');
-        }
-        return; // Skip API call
-      }
-
-      // If not mock OTP, try API call but handle errors gracefully
-      try {
-        final response = await apiService.verifyOTP(_normalizedPhone, otp);
-
-        setState(() {
-          _isLoading = false;
-        });
-
-        if (mounted) {
-          // Check if user already exists (has profile)
-          if (response['token'] != null) {
-            // Save phone number to storage for profile setup
-            if (response['user'] != null && response['user']['phone'] != null) {
-              await StorageService.saveUserData(
-                userId: 0, // Will be set after registration
-                role: 'buyer', // Temporary, will be set in role selection
-                phone: response['user']['phone'] as String,
-              );
-            } else {
-              // Fallback: save normalized phone
-              await StorageService.saveUserData(
-                userId: 0,
-                role: 'buyer',
-                phone: _normalizedPhone,
-              );
-            }
-            
+          // Show success message
+          if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Phone verified! Welcome to BidMaster'),
+              SnackBar(
+                content: Text('Login successful! Welcome ${user['name'] ?? 'to BidMaster'}'),
                 backgroundColor: AppColors.success,
+                duration: const Duration(seconds: 2),
               ),
             );
-            context.go('/role-selection');
-          } else {
-            _showError('Verification failed', 'Please enter the correct OTP (use 123456 for mock)');
           }
-        }
-      } catch (apiError) {
-        // Ignore API errors - treat as if OTP is incorrect
-        setState(() {
-          _isLoading = false;
-          _otpAttempts++;
-        });
 
-        if (_otpAttempts >= _maxOTPAttempts) {
-          _showError('Too many failed attempts',
-              'Please use mock OTP: 123456');
+          // Wait a moment for UI to update
+          await Future.delayed(const Duration(milliseconds: 500));
+
+          if (!mounted) return;
+
+          // Dev mode: Skip profile setup redirect for auto-login
+          if (AUTO_LOGIN_ENABLED && kDebugMode) {
+            print('🧠 Dev mode active - skipping profile setup redirect');
+            
+            // Redirect based on role (skip profile setup in dev mode)
+            if (role == 'buyer') {
+              print('🧭 Redirecting to BuyerDashboard()');
+              context.go('/home');
+            } else if (role == 'seller') {
+              print('🧭 Redirecting to SellerDashboard()');
+              context.go('/seller-dashboard');
+            } else {
+              // Admin roles (superadmin, moderator, viewer) - redirect to role-selection
+              // They can choose to be buyer or seller
+              print('🧭 Redirecting to RoleSelection (admin role)');
+              context.go('/role-selection');
+            }
+          } else {
+            // Production mode: Check profile completion
+            final userName = user['name'] as String?;
+            final userEmail = user['email'] as String?;
+            
+            if (userName == null || userEmail == null) {
+              // Profile incomplete - redirect to profile setup
+              print('🧭 Redirecting to ProfileSetup (incomplete profile)');
+              context.go('/profile-setup', extra: {'role': role});
+            } else {
+              // Profile complete - redirect based on role
+              if (role == 'buyer') {
+                print('🧭 Redirecting to BuyerDashboard()');
+                context.go('/home');
+              } else if (role == 'seller') {
+                print('🧭 Redirecting to SellerDashboard()');
+                context.go('/seller-dashboard');
+              } else {
+                // Admin or unknown role - go to role selection
+                print('🧭 Redirecting to RoleSelection (unknown role: $role)');
+                context.go('/role-selection');
+              }
+            }
+          }
         } else {
-          _showError('Incorrect OTP', 'Please use mock OTP: 123456 (API errors ignored)');
+          print('⚠️ Navigation blocked - Missing role or token');
+          print('   Response success: ${response['success']}');
+          print('   Token present: ${response['token'] != null}');
+          _showError('Login failed', response['message'] ?? 'Invalid OTP. Please try again.');
         }
       }
     } catch (e) {
@@ -264,10 +378,12 @@ class _AuthScreenState extends State<AuthScreen> {
       });
 
       if (_otpAttempts >= _maxOTPAttempts) {
-        _showError('Too many failed attempts',
-            'Please use mock OTP: 123456');
+        _showError('Too many failed attempts', 'Please request a new OTP');
       } else {
-        _showError('Verification error', 'Please use mock OTP: 123456');
+        final errorMsg = e.toString().contains('404') 
+            ? 'Phone number not registered. Please contact administrator.'
+            : 'Login failed. Please check your OTP and try again.';
+        _showError('Verification error', errorMsg);
       }
     }
   }
@@ -282,50 +398,45 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      // 🧪 Mock mode: Use mock OTP (API disabled)
-      // Simulate API delay
-      await Future.delayed(const Duration(milliseconds: 800));
+      // Call actual sendOTP API
+      final otpResponse = await apiService.sendOTP(_normalizedPhone);
       
       setState(() {
         _isLoading = false;
-        _receivedOTP = '123456'; // Mock OTP
+        _receivedOTP = otpResponse['otp']?.toString() ?? '';
       });
 
       if (mounted) {
+        final otpMessage = _receivedOTP.isNotEmpty 
+            ? 'OTP resent: $_receivedOTP'
+            : 'OTP resent to your phone';
+        
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Mock OTP resent: 123456 (API disabled)'),
+          SnackBar(
+            content: Text(otpMessage),
             backgroundColor: AppColors.info,
           ),
         );
 
-        // Auto-fill OTP
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            _autoFillOTP();
-          }
-        });
+        // Auto-fill OTP if available
+        if (_receivedOTP.isNotEmpty) {
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              _autoFillOTP();
+            }
+          });
+        }
       }
     } catch (e) {
-      // Ignore errors - use mock OTP
       setState(() {
         _isLoading = false;
-        _receivedOTP = '123456'; // Fallback to mock OTP
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Mock OTP: 123456 (API error ignored)'),
-            backgroundColor: AppColors.info,
-          ),
-        );
-
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            _autoFillOTP();
-          }
-        });
+        final errorMsg = e.toString().contains('404')
+            ? 'Phone number not registered. Please contact administrator.'
+            : 'Failed to resend OTP. Please try again.';
+        _showError('Resend OTP Error', errorMsg);
       }
     }
   }
@@ -348,10 +459,10 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   void _autoFillOTP() {
-    if (_receivedOTP == null || _receivedOTP!.length != 6) return;
+    if (_receivedOTP == null || _receivedOTP!.length != 4) return;
     
     setState(() {
-      for (int i = 0; i < 6; i++) {
+      for (int i = 0; i < 4; i++) {
         if (i < _receivedOTP!.length) {
           _otpControllers[i].text = _receivedOTP![i];
         }
@@ -523,7 +634,7 @@ class _AuthScreenState extends State<AuthScreen> {
         const SizedBox(height: 8),
 
         Text(
-          "You'll receive a 6-digit verification code",
+          "OTP sent to your phone",
           style: Theme.of(context).textTheme.bodySmall,
         ),
 
@@ -580,17 +691,17 @@ class _AuthScreenState extends State<AuthScreen> {
         // OTP Input Label
         Center(
           child: Text(
-            'Enter 6-digit OTP',
+            'Enter 4-digit OTP',
             style: Theme.of(context).textTheme.titleMedium,
           ),
         ),
 
         const SizedBox(height: 24),
 
-        // OTP Input
+        // OTP Input (4 digits for backend)
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(6, (index) {
+          children: List.generate(4, (index) {
             return Container(
               width: 48,
               height: 56,
@@ -672,7 +783,7 @@ class _AuthScreenState extends State<AuthScreen> {
         SizedBox(
           height: 48,
           child: ElevatedButton(
-            onPressed: _isLoading || _enteredOTP.length != 6
+            onPressed: _isLoading || _enteredOTP.length != 4
                 ? null
                 : _handleOTPVerify,
             style: ElevatedButton.styleFrom(

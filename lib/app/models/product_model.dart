@@ -47,15 +47,35 @@ class ProductModel {
     this.auctionStatus,
   });
 
+  // Helper function to safely parse numeric values from JSON
+  static double? _parseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    if (value is String) {
+      final parsed = double.tryParse(value);
+      return parsed;
+    }
+    return double.tryParse(value.toString());
+  }
+
+  static int? _parseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) {
+      final parsed = int.tryParse(value);
+      return parsed;
+    }
+    return int.tryParse(value.toString());
+  }
+
   factory ProductModel.fromJson(Map<String, dynamic> json) {
     // Parse seller information from nested object or flat fields
     final seller = json['seller'] as Map<String, dynamic>? ?? {};
     
     // Safely parse starting_price with fallback
     final startingPriceValue = json['starting_price'] ?? json['starting_bid'] ?? 0.0;
-    final startingPrice = (startingPriceValue is num) 
-        ? startingPriceValue.toDouble() 
-        : (double.tryParse(startingPriceValue.toString()) ?? 0.0);
+    final startingPrice = _parseDouble(startingPriceValue) ?? 0.0;
     
     // Safely parse auction_end_time
     DateTime? auctionEndTime;
@@ -80,18 +100,12 @@ class ProductModel {
       description: json['description'] as String?,
       imageUrl: json['image_url'] as String?,
       startingPrice: startingPrice,
-      startingBid: json['starting_bid'] != null
-          ? (json['starting_bid'] as num).toDouble()
-          : null,
-      currentPrice: json['current_price'] != null
-          ? (json['current_price'] as num).toDouble()
-          : null,
-      currentBid: json['current_bid'] != null
-          ? (json['current_bid'] as num).toDouble()
-          : null,
+      startingBid: _parseDouble(json['starting_bid']),
+      currentPrice: _parseDouble(json['current_price']),
+      currentBid: _parseDouble(json['current_bid']),
       status: json['status'] as String? ?? 'pending',
       auctionEndTime: auctionEndTime,
-      totalBids: json['total_bids'] as int? ?? 0,
+      totalBids: _parseInt(json['total_bids']) ?? 0,
       highestBidderId: json['highest_bidder_id'] as int?,
       categoryId: json['category_id'] as int?,
       sellerName: json['seller_name'] as String? ?? seller['name'] as String?,
@@ -99,11 +113,7 @@ class ProductModel {
       sellerPhone: seller['phone'] as String? ?? json['seller_phone'] as String?,
       categoryName: json['category_name'] as String?,
       highestBidderName: json['highest_bidder_name'] as String?,
-      hoursLeft: json['hours_left'] != null
-          ? (json['hours_left'] is num 
-              ? (json['hours_left'] as num).toDouble() 
-              : double.tryParse(json['hours_left'].toString()) ?? null)
-          : null,
+      hoursLeft: _parseDouble(json['hours_left']),
       auctionStatus: json['auction_status'] as String?,
     );
   }

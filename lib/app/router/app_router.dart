@@ -24,8 +24,13 @@ class AppRouter {
       }
 
       // Role selection and profile setup - accessible after OTP verification
+      // Allow these routes without role checks (user might be selecting role)
       if (location == '/role-selection' || location == '/profile-setup') {
-        return null;
+        // Only check if user is logged in, don't check role
+        if (!isLoggedIn) {
+          return '/auth';
+        }
+        return null; // Allow navigation to role-selection and profile-setup
       }
 
       // Protected routes - require authentication
@@ -36,17 +41,30 @@ class AppRouter {
       // Get user role
       final role = await StorageService.getUserRole();
 
-      // Admin blocked from mobile app
+      // Admin blocked from mobile app (only 'admin', not 'superadmin'/'moderator'/'viewer')
       if (role == 'admin') {
         await StorageService.clearAll();
         return '/auth';
+      }
+      
+      // Allow admin roles (superadmin, moderator, viewer) to access role-selection
+      // They might want to switch to buyer/seller role
+      if (role == 'superadmin' || role == 'moderator' || role == 'viewer') {
+        // Allow access to role-selection and profile-setup
+        if (location == '/role-selection' || location == '/profile-setup') {
+          return null;
+        }
+        // For admin roles trying to access buyer/seller routes, redirect to role-selection
+        if (location.startsWith('/home') || location.startsWith('/seller-dashboard')) {
+          return '/role-selection';
+        }
       }
 
       // Buyer routes
       if (location.startsWith('/home') || location.startsWith('/product-details')) {
         if (role != 'buyer') {
           // Redirect to appropriate dashboard
-          return role == 'seller' ? '/seller-dashboard' : '/auth';
+          return role == 'seller' ? '/seller-dashboard' : '/role-selection';
         }
       }
 
@@ -54,7 +72,7 @@ class AppRouter {
       if (location.startsWith('/seller-dashboard')) {
         if (role != 'seller') {
           // Redirect to appropriate dashboard
-          return role == 'buyer' ? '/home' : '/auth';
+          return role == 'buyer' ? '/home' : '/role-selection';
         }
       }
 

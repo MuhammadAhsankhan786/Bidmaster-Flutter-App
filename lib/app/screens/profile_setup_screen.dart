@@ -126,40 +126,48 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     );
 
     try {
-      // Generate a temporary password (user will need to set proper password later)
-      // For now, using phone number as temporary password
-      final tempPassword = phone.replaceAll(RegExp(r'[^\d]'), '');
+      // User is already logged in via phone+OTP, just update profile
+      // Get token from storage
+      final token = await StorageService.getToken();
+      if (token == null) {
+        if (!mounted) return;
+        Navigator.of(context).pop(); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Session expired. Please login again.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        context.go('/auth');
+        return;
+      }
 
-      // Register user with backend (mocked for CORS safety)
-      await apiService.register(
+      // Update profile using PATCH /api/auth/profile
+      await apiService.updateProfile(
         name: _nameController.text,
-        phone: phone,
-        email: _emailController.text,
-        password: tempPassword, // TODO: Add password field or use phone as password
-        role: widget.userRole,
+        phone: phone, // Keep existing phone
       );
+
+      // Update role in storage to match selected role
+      final userId = await StorageService.getUserId();
+      if (userId != null) {
+        await StorageService.saveUserData(
+          userId: userId,
+          role: widget.userRole, // Ensure role matches selected role
+          phone: phone,
+          name: _nameController.text,
+          email: _emailController.text,
+        );
+        print('✅ Profile updated and role saved: ${widget.userRole}');
+      }
 
       if (!mounted) return;
       Navigator.of(context).pop(); // Close loading dialog
 
-      // Show mock register notification
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Mock register used (CORS safe)'),
-          backgroundColor: AppColors.info,
-          duration: Duration(seconds: 2),
-        ),
-      );
-
-      // Small delay before success message
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      if (!mounted) return;
-
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Profile created! Welcome to BidMaster'),
+          content: Text('Profile updated! Welcome to BidMaster'),
           backgroundColor: AppColors.success,
         ),
       );

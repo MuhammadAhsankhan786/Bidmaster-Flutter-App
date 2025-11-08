@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
+import '../services/storage_service.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
   const RoleSelectionScreen({super.key});
@@ -150,14 +151,52 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
       _isNavigating = true;
     });
 
+    print('🔄 Role selection: $_selectedRole');
+    print('   Navigating to profile-setup...');
+
+    // Update role in storage when user selects a role
+    // This allows the router to properly redirect to seller/buyer dashboard
+    final userId = await StorageService.getUserId();
+    final phone = await StorageService.getUserPhone();
+    final name = await StorageService.getUserName();
+    final email = await StorageService.getUserEmail();
+    
+    print('   Current storage - userId: $userId, phone: $phone');
+    
+    if (userId != null && phone != null) {
+      await StorageService.saveUserData(
+        userId: userId,
+        role: _selectedRole!, // Update role to selected role
+        phone: phone,
+        name: name,
+        email: email,
+      );
+      print('✅ Role updated in storage: $_selectedRole');
+      
+      // Verify role was saved
+      final savedRole = await StorageService.getUserRole();
+      print('   Verified saved role: $savedRole');
+    } else {
+      print('⚠️ Warning: userId or phone is null, cannot update role');
+    }
+
     // Small delay for smooth visual feedback before navigation
-    await Future.delayed(const Duration(milliseconds: 300));
+    await Future.delayed(const Duration(milliseconds: 500));
 
     if (mounted) {
-      context.go(
-        '/profile-setup',
-        extra: {'role': _selectedRole},
-      );
+      print('   Navigating to /profile-setup with role: $_selectedRole');
+      try {
+        context.go(
+          '/profile-setup',
+          extra: {'role': _selectedRole},
+        );
+        print('✅ Navigation successful');
+      } catch (e) {
+        print('❌ Navigation error: $e');
+        setState(() {
+          _isNavigating = false;
+        });
+      }
     }
   }
 }
