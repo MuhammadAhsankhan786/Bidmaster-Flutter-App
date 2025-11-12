@@ -461,9 +461,47 @@ class ApiService {
       );
       
       print('✅ JWT verified');
+      print('   Response status: ${response.statusCode}');
+      print('   Full response: ${response.data}');
+      print('   Response data keys: ${response.data.keys}');
+      print('   Response success: ${response.data['success']}');
       
-      final products = (response.data['data'] as List)
-          .map((json) => ProductModel.fromJson(json))
+      // Check if data exists
+      if (response.data['data'] == null) {
+        print('⚠️ Response data is null');
+        print('   Full response structure: ${response.data}');
+        return [];
+      }
+      
+      final dataList = response.data['data'];
+      print('   Data type: ${dataList.runtimeType}');
+      print('   Data length: ${dataList is List ? dataList.length : 'N/A'}');
+      
+      if (dataList is! List) {
+        print('❌ Response data is not a list: $dataList');
+        print('   Actual type: ${dataList.runtimeType}');
+        return [];
+      }
+      
+      if (dataList.isEmpty) {
+        print('⚠️ Response data is empty list');
+        print('   This means the logged-in seller has no products in database');
+        return [];
+      }
+      
+      print('   First product sample: ${dataList[0]}');
+      
+      final products = dataList
+          .map((json) {
+            try {
+              return ProductModel.fromJson(json as Map<String, dynamic>);
+            } catch (e) {
+              print('❌ Error parsing product: $e');
+              print('   JSON: $json');
+              return null;
+            }
+          })
+          .whereType<ProductModel>()
           .toList();
       
       print('✅ Fetched ${products.length} records (my products)');
@@ -471,6 +509,10 @@ class ApiService {
       return products;
     } catch (e) {
       print('❌ Error fetching my products: $e');
+      if (e is DioException && e.response != null) {
+        print('   Status Code: ${e.response?.statusCode}');
+        print('   Response Data: ${e.response?.data}');
+      }
       throw _handleError(e);
     }
   }

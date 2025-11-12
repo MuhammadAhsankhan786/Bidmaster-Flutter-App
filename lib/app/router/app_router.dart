@@ -8,6 +8,7 @@ import '../screens/buyer_dashboard_screen.dart';
 import '../screens/product_details_screen.dart';
 import '../screens/seller_dashboard_screen.dart';
 import '../screens/notifications_screen.dart';
+import '../screens/product_creation_screen.dart';
 import '../services/storage_service.dart';
 
 /// Application router configuration
@@ -69,7 +70,7 @@ class AppRouter {
       }
 
       // Seller routes
-      if (location.startsWith('/seller-dashboard')) {
+      if (location.startsWith('/seller-dashboard') || location == '/product-create') {
         if (role != 'seller') {
           // Redirect to appropriate dashboard
           return role == 'buyer' ? '/home' : '/role-selection';
@@ -131,6 +132,11 @@ class AppRouter {
         path: '/seller-dashboard',
         name: 'seller-dashboard',
         builder: (context, state) => const SellerDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/product-create',
+        name: 'product-create',
+        builder: (context, state) => const ProductCreationScreen(),
       ),
       GoRoute(
         path: '/notifications',

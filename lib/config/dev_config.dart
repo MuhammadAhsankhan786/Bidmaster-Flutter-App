@@ -15,3 +15,6 @@ const List<String> DEV_PHONES = [
 // Default role (Super Admin)
 const int DEFAULT_DEV_INDEX = 0;
 
+// Default OTP for development (4 digits)
+const String DEFAULT_DEV_OTP = '1234';
+

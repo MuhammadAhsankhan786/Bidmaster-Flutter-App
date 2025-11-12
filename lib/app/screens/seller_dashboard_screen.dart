@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
 import '../widgets/countdown_timer.dart';
 import '../services/api_service.dart';
+import '../services/storage_service.dart';
 import '../models/product_model.dart';
 
 class SellerDashboardScreen extends StatefulWidget {
@@ -69,12 +70,24 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
     });
 
     try {
+      // Debug: Check logged-in user
+      final userId = await StorageService.getUserId();
+      final userRole = await StorageService.getUserRole();
+      final userPhone = await StorageService.getUserPhone();
+      print('🔍 Debug - Current User:');
+      print('   User ID: $userId');
+      print('   Role: $userRole');
+      print('   Phone: $userPhone');
+      
       final products = await apiService.getMyProducts();
+      print('📦 Products received: ${products.length}');
+      
       setState(() {
         _products = products;
         _isLoading = false;
       });
     } catch (e) {
+      print('❌ Error loading products: $e');
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;
@@ -162,7 +175,14 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                   ),
                   FloatingActionButton(
                     onPressed: () {
-                      // Navigate to add product screen
+                      print('🔘 Add New Listing FAB clicked');
+                      context.push('/product-create').then((result) {
+                        print('🔘 Product creation result: $result');
+                        if (result == true) {
+                          // Reload products after successful creation
+                          _loadProducts();
+                        }
+                      });
                     },
                     backgroundColor: AppColors.blue600,
                     child: const Icon(Icons.add, color: Colors.white),
@@ -173,11 +193,13 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
 
             // Content
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+              child: RefreshIndicator(
+                onRefresh: _loadProducts,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                     // Stats Cards
                     if (_isLoading && _products.isEmpty)
                       const Center(
@@ -309,7 +331,14 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                       height: 48,
                       child: OutlinedButton.icon(
                         onPressed: () {
-                          // Navigate to add product screen
+                          print('🔘 Add New Listing button clicked');
+                          context.push('/product-create').then((result) {
+                            print('🔘 Product creation result: $result');
+                            if (result == true) {
+                              // Reload products after successful creation
+                              _loadProducts();
+                            }
+                          });
                         },
                         icon: const Icon(Icons.add),
                         label: const Text('Add New Listing'),

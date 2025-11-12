@@ -214,7 +214,7 @@ class _AuthScreenState extends State<AuthScreen> {
       });
 
       if (mounted) {
-        final otpMessage = _receivedOTP.isNotEmpty 
+        final otpMessage = (_receivedOTP?.isNotEmpty ?? false)
             ? 'OTP sent: $_receivedOTP'
             : 'OTP sent to your phone';
         
@@ -227,7 +227,7 @@ class _AuthScreenState extends State<AuthScreen> {
         );
 
         // Auto-fill OTP after short delay if OTP is available
-        if (_receivedOTP.isNotEmpty) {
+        if (_receivedOTP?.isNotEmpty ?? false) {
           Future.delayed(const Duration(milliseconds: 500), () {
             if (mounted && _currentStep == 1) {
               _autoFillOTP();
@@ -407,7 +407,7 @@ class _AuthScreenState extends State<AuthScreen> {
       });
 
       if (mounted) {
-        final otpMessage = _receivedOTP.isNotEmpty 
+        final otpMessage = (_receivedOTP?.isNotEmpty ?? false)
             ? 'OTP resent: $_receivedOTP'
             : 'OTP resent to your phone';
         
@@ -419,7 +419,7 @@ class _AuthScreenState extends State<AuthScreen> {
         );
 
         // Auto-fill OTP if available
-        if (_receivedOTP.isNotEmpty) {
+        if (_receivedOTP?.isNotEmpty ?? false) {
           Future.delayed(const Duration(milliseconds: 500), () {
             if (mounted) {
               _autoFillOTP();
