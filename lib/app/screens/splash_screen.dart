@@ -61,15 +61,24 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward().then((_) async {
       // Check for auto-login after animation completes
+      // Ensure SharedPreferences is initialized before navigation
       await Future.delayed(const Duration(milliseconds: 500));
       if (mounted) {
-        final isLoggedIn = await StorageService.isLoggedIn();
-        if (isLoggedIn) {
-          // User is logged in - router will handle role-based redirect
-          await RoleGuard.navigateByRole(context);
-        } else {
-          // No session - go to onboarding
-          context.go('/onboarding');
+        try {
+          // Ensure storage is ready before checking login status
+          final isLoggedIn = await StorageService.isLoggedIn();
+          if (isLoggedIn) {
+            // User is logged in - router will handle role-based redirect
+            await RoleGuard.navigateByRole(context);
+          } else {
+            // No session - go to onboarding
+            context.go('/onboarding');
+          }
+        } catch (e) {
+          // If there's an error, go to onboarding as fallback
+          if (mounted) {
+            context.go('/onboarding');
+          }
         }
       }
     });

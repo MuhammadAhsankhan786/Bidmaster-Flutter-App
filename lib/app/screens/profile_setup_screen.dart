@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../theme/colors.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
+import '../utils/jwt_utils.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
   final String userRole;
@@ -142,24 +143,19 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         return;
       }
 
-      // Update profile using PATCH /api/auth/profile
-      await apiService.updateProfile(
+      // 🔧 FIX: Update profile with role - backend will update database and return new tokens
+      print('🔄 Updating profile with role: ${widget.userRole}');
+      print('   Name: ${_nameController.text}');
+      print('   Email: ${_emailController.text}');
+      print('   Role: ${widget.userRole}');
+      
+      final updatedUser = await apiService.updateProfile(
         name: _nameController.text,
         phone: phone, // Keep existing phone
+        role: widget.userRole, // 🔧 FIX: Update role in database and get new tokens
       );
-
-      // Update role in storage to match selected role
-      final userId = await StorageService.getUserId();
-      if (userId != null) {
-        await StorageService.saveUserData(
-          userId: userId,
-          role: widget.userRole, // Ensure role matches selected role
-          phone: phone,
-          name: _nameController.text,
-          email: _emailController.text,
-        );
-        print('✅ Profile updated and role saved: ${widget.userRole}');
-      }
+      print('✅ Profile updated (name, email, role)');
+      print('✅ New tokens received and saved (if role was updated)');
 
       if (!mounted) return;
       Navigator.of(context).pop(); // Close loading dialog
@@ -172,10 +168,72 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         ),
       );
 
+      // Small delay to ensure storage is fully updated before navigation
+      await Future.delayed(const Duration(milliseconds: 300));
+      
+      // 🔧 FIX: Verify token and role are in sync after update
+      final finalToken = await StorageService.getAccessToken();
+      final finalRole = await StorageService.getUserRole();
+      final tokenRole = finalToken != null ? JwtUtils.getRoleFromToken(finalToken) : null;
+      
+      print('🧭 Final check before navigation:');
+      print('   Token present: ${finalToken != null}');
+      print('   Token role: $tokenRole');
+      print('   Stored role: $finalRole (expected: ${widget.userRole})');
+      
+      // Verify token exists
+      if (finalToken == null) {
+        print('⚠️⚠️⚠️ Token missing - user needs to login again');
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Session expired. Please login again.'),
+            backgroundColor: AppColors.error,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) {
+          context.go('/auth');
+        }
+        return;
+      }
+      
+      // Verify token role matches stored role
+      if (tokenRole != null && finalRole != null && tokenRole != finalRole) {
+        print('⚠️⚠️⚠️ ROLE MISMATCH DETECTED!');
+        print('   Token role: $tokenRole');
+        print('   SharedPreferences role: $finalRole');
+        print('   This should not happen after role update - forcing re-login');
+        
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Role mismatch detected. Please login again.'),
+            backgroundColor: AppColors.error,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        
+        await StorageService.clearAll();
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) {
+          context.go('/auth');
+        }
+        return;
+      }
+      
       // Navigate based on role
       if (widget.userRole == 'buyer') {
+        print('🧭 Navigating to /home for buyer role');
         context.go('/home');
       } else {
+        print('🧭 Navigating to /seller-dashboard for seller role');
         context.go('/seller-dashboard');
       }
     } catch (e) {

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
 import '../services/storage_service.dart';
+import '../services/api_service.dart';
+import '../utils/jwt_utils.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
   const RoleSelectionScreen({super.key});
@@ -68,22 +70,25 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
 
               // Role Options
               Expanded(
-                child: Column(
-                  children: _roles.map((role) {
-                    final isSelected = _selectedRole == role.id;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: _RoleCard(
-                        role: role,
-                        isSelected: isSelected,
-                        onTap: () {
-                          setState(() {
-                            _selectedRole = role.id;
-                          });
-                        },
-                      ),
-                    );
-                  }).toList(),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: _roles.map((role) {
+                      final isSelected = _selectedRole == role.id;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: _RoleCard(
+                          role: role,
+                          isSelected: isSelected,
+                          onTap: () {
+                            setState(() {
+                              _selectedRole = role.id;
+                            });
+                          },
+                        ),
+                      );
+                    }).toList(),
+                  ),
                 ),
               ),
 
@@ -152,47 +157,120 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
     });
 
     print('🔄 Role selection: $_selectedRole');
-    print('   Navigating to profile-setup...');
+    print('   Updating role in database via updateProfile API...');
 
-    // Update role in storage when user selects a role
-    // This allows the router to properly redirect to seller/buyer dashboard
-    final userId = await StorageService.getUserId();
-    final phone = await StorageService.getUserPhone();
-    final name = await StorageService.getUserName();
-    final email = await StorageService.getUserEmail();
-    
-    print('   Current storage - userId: $userId, phone: $phone');
-    
-    if (userId != null && phone != null) {
-      await StorageService.saveUserData(
-        userId: userId,
-        role: _selectedRole!, // Update role to selected role
-        phone: phone,
-        name: name,
-        email: email,
-      );
-      print('✅ Role updated in storage: $_selectedRole');
+    try {
+      // 🔧 FIX: Update role in database via updateProfile API
+      // This will update the database, generate new tokens with the updated role,
+      // and save them to SharedPreferences
+      var userId = await StorageService.getUserId();
+      var phone = await StorageService.getUserPhone();
       
-      // Verify role was saved
+      // 🔧 FIX: If user data is missing, try to fetch from profile endpoint
+      if (userId == null || phone == null) {
+        print('⚠️ Warning: userId or phone is null, attempting to fetch from profile...');
+        try {
+          final profile = await apiService.getProfile();
+          userId = profile.id;
+          phone = profile.phone;
+          
+          // Save the fetched user data
+          await StorageService.saveUserData(
+            userId: profile.id,
+            role: profile.role,
+            phone: profile.phone,
+            name: profile.name,
+            email: profile.email,
+          );
+          print('✅ User data fetched and saved from profile endpoint');
+        } catch (e) {
+          print('❌ Failed to fetch user profile: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('User data not found. Please login again.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            context.go('/auth');
+          }
+          setState(() {
+            _isNavigating = false;
+          });
+          return;
+        }
+      }
+      
+      // Final check - if still null after fetch attempt, redirect to login
+      if (userId == null || phone == null) {
+        print('❌ Error: userId or phone is still null after fetch attempt');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('User data not found. Please login again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          context.go('/auth');
+        }
+        setState(() {
+          _isNavigating = false;
+        });
+        return;
+      }
+
+      // Call updateProfile API to update role in database and get new tokens
+      await apiService.updateProfile(role: _selectedRole!);
+      print('✅ Role updated in database via API');
+      print('✅ New tokens received and saved with role: $_selectedRole');
+
+      // Verify role was saved correctly
       final savedRole = await StorageService.getUserRole();
+      final token = await StorageService.getAccessToken();
+      final tokenRole = token != null ? JwtUtils.getRoleFromToken(token) : null;
+      
       print('   Verified saved role: $savedRole');
-    } else {
-      print('⚠️ Warning: userId or phone is null, cannot update role');
-    }
-
-    // Small delay for smooth visual feedback before navigation
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    if (mounted) {
-      print('   Navigating to /profile-setup with role: $_selectedRole');
-      try {
-        context.go(
-          '/profile-setup',
-          extra: {'role': _selectedRole},
+      print('   Verified token role: $tokenRole');
+      
+      if (savedRole != _selectedRole) {
+        print('⚠️ Warning: Saved role mismatch - retrying...');
+        // Role should have been updated by updateProfile, but verify
+        await StorageService.saveUserData(
+          userId: userId,
+          role: _selectedRole!,
+          phone: phone,
+          name: await StorageService.getUserName(),
+          email: await StorageService.getUserEmail(),
         );
-        print('✅ Navigation successful');
-      } catch (e) {
-        print('❌ Navigation error: $e');
+      }
+
+      // Small delay for smooth visual feedback before navigation
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      if (mounted) {
+        print('   Navigating to /profile-setup with role: $_selectedRole');
+        try {
+          context.go(
+            '/profile-setup',
+            extra: {'role': _selectedRole},
+          );
+          print('✅ Navigation successful');
+        } catch (e) {
+          print('❌ Navigation error: $e');
+          setState(() {
+            _isNavigating = false;
+          });
+        }
+      }
+    } catch (e) {
+      print('❌ Error updating role: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update role: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
         setState(() {
           _isNavigating = false;
         });

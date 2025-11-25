@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
-import '../../config/dev_config.dart';
+import '../../config/dev_config.dart' show AUTO_LOGIN_ENABLED, ONE_NUMBER_LOGIN_PHONE;
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -19,18 +19,17 @@ class _AuthScreenState extends State<AuthScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _otpController = TextEditingController();
   final List<TextEditingController> _otpControllers = List.generate(
-    4,
+    6,
     (index) => TextEditingController(),
   );
   final List<FocusNode> _otpFocusNodes = List.generate(
-    4,
+    6,
     (index) => FocusNode(),
   );
   String _selectedCountryCode = '+964'; // Default to Iraq for backend compatibility
   bool _isLoading = false;
   bool _isPhoneValid = false;
   int _otpAttempts = 0;
-  String? _receivedOTP; // Store OTP from API response for auto-fill
   String _normalizedPhone = ''; // Store normalized phone for verification
 
   static const int _maxOTPAttempts = 5;
@@ -48,8 +47,6 @@ class _AuthScreenState extends State<AuthScreen> {
 
   bool get _isPhoneNumberValid {
     final phoneDigits = _phoneController.text.replaceAll(RegExp(r'[^\d]'), '');
-    // Phone must be at least 10 digits (for countries that require it) and match the expected length
-    // For countries with 9 digits, we check exact match; for others, ensure at least 10
     if (_maxPhoneLength < 10) {
       return phoneDigits.length == _maxPhoneLength;
     }
@@ -78,14 +75,17 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   /// Auto-login function (development mode)
+  /// Note: Auto-fills phone only, user must enter OTP manually from SMS
   Future<void> _performAutoLogin() async {
     if (!mounted) return;
     
-    final String devPhone = DEV_PHONES[DEFAULT_DEV_INDEX];
+    final String devPhone = ONE_NUMBER_LOGIN_PHONE;
     
-    print('🚀 AUTO LOGIN ENABLED - Development Mode');
-    print('   Phone: $devPhone');
-    print('   OTP: $DEFAULT_DEV_OTP');
+    if (kDebugMode) {
+      print('🚀 AUTO LOGIN ENABLED - Development Mode');
+      print('📱 Phone: $devPhone');
+      print('⚠️ Note: OTP must be entered manually from SMS (no auto-fill)');
+    }
     
     // Extract phone digits (remove +964 prefix)
     String phoneDigits = devPhone.replaceAll(RegExp(r'[^\d]'), '');
@@ -96,55 +96,56 @@ class _AuthScreenState extends State<AuthScreen> {
     // Set phone number in controller
     setState(() {
       _phoneController.text = phoneDigits;
-      _normalizedPhone = devPhone;
+      _normalizedPhone = devPhone; // Use full phone with +964
       _isPhoneValid = true;
     });
+    
+    if (kDebugMode) {
+      print('📱 Phone digits for input: $phoneDigits');
+      print('📱 Normalized phone (will be used for OTP): $_normalizedPhone');
+    }
     
     // Validate phone
     _validatePhoneNumber();
     
-    // Simulate phone submit delay
+    // Wait before sending OTP
     await Future.delayed(const Duration(milliseconds: 500));
     
     if (!mounted) return;
     
-    // Move to OTP screen
-    setState(() {
-      _currentStep = 1;
-      _receivedOTP = DEFAULT_DEV_OTP;
-    });
-    
-    // Auto-fill OTP after short delay
-    await Future.delayed(const Duration(milliseconds: 300));
-    
-    if (!mounted) return;
-    
-    // Auto-fill OTP fields
-    setState(() {
-      for (int i = 0; i < 4 && i < DEFAULT_DEV_OTP.length; i++) {
-        _otpControllers[i].text = DEFAULT_DEV_OTP[i];
-      }
-      _otpController.text = DEFAULT_DEV_OTP;
-    });
-    
-    // Show info message
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('🚀 Auto login (Dev Mode)'),
-          backgroundColor: AppColors.info,
-          duration: Duration(seconds: 2),
-        ),
-      );
+    // Send OTP via Twilio Verify
+    if (kDebugMode) {
+      print('📤 Sending OTP via Twilio Verify: $_normalizedPhone');
     }
-    
-    // Auto-verify after short delay
-    await Future.delayed(const Duration(milliseconds: 1000));
-    
-    if (!mounted) return;
-    
-    // Trigger login automatically
-    await _handleOTPVerify();
+    try {
+      await apiService.sendOTP(_normalizedPhone);
+      if (kDebugMode) {
+        print('✅ OTP sent successfully via Twilio Verify');
+      }
+      
+      // Move to OTP screen (user must enter OTP manually)
+      setState(() {
+        _currentStep = 1;
+      });
+      
+      // Show info message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🚀 Auto login (Dev Mode) - Enter OTP manually from SMS'),
+            backgroundColor: AppColors.info,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ Error sending OTP: $e');
+      }
+      if (mounted) {
+        _showError('OTP Error', 'Failed to send OTP. Please try again.');
+      }
+    }
   }
 
   @override
@@ -178,12 +179,29 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      // Construct full phone number with country code
+      // Normalize phone number to match backend normalizeIraqPhone() rules
       final phoneDigits = _phoneController.text.replaceAll(RegExp(r'[^\d]'), '');
-      final fullPhone = '$_selectedCountryCode$phoneDigits';
+      String normalizedPhone = '';
       
-      // Additional validation: ensure it starts with +964
-      if (!fullPhone.startsWith('+964')) {
+      // Apply backend normalization rules
+      if (phoneDigits.startsWith('0')) {
+        normalizedPhone = '+964${phoneDigits.substring(1)}';
+      } else if (phoneDigits.startsWith('00964')) {
+        normalizedPhone = '+964${phoneDigits.substring(5)}';
+      } else if (phoneDigits.startsWith('964')) {
+        normalizedPhone = '+$phoneDigits';
+      } else if (_selectedCountryCode == '+964') {
+        normalizedPhone = '$_selectedCountryCode$phoneDigits';
+      } else {
+        _showError('Invalid Phone Number', 'Only Iraq (+964) numbers are allowed.');
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+      
+      // Validate phone format (must start with +964 and have 9-10 digits after)
+      if (!normalizedPhone.startsWith('+964')) {
         _showError('Invalid Phone Number', 'Only Iraq (+964) numbers are allowed.');
         setState(() {
           _isLoading = false;
@@ -192,7 +210,8 @@ class _AuthScreenState extends State<AuthScreen> {
       }
       
       // Validate phone length (Iraq format: +964 + 9-10 digits)
-      if (phoneDigits.length < 9 || phoneDigits.length > 10) {
+      final digitsAfterPrefix = normalizedPhone.substring(4); // Remove '+964'
+      if (digitsAfterPrefix.length < 9 || digitsAfterPrefix.length > 10) {
         _showError('Invalid Phone Number', 'Phone number must be 9-10 digits after +964');
         setState(() {
           _isLoading = false;
@@ -200,40 +219,31 @@ class _AuthScreenState extends State<AuthScreen> {
         return;
       }
       
-      _normalizedPhone = fullPhone;
-      print('📱 Phone normalized: $_normalizedPhone');
+      _normalizedPhone = normalizedPhone;
+      if (kDebugMode) {
+        print('📱 Phone normalized: $_normalizedPhone');
+        print('📤 Sending OTP request to backend with phone: $_normalizedPhone');
+      }
 
-      // Call actual sendOTP API
-      final otpResponse = await apiService.sendOTP(_normalizedPhone);
+      // Call POST /auth/send-otp via Twilio Verify
+      await apiService.sendOTP(_normalizedPhone);
+      if (kDebugMode) {
+        print('✅ OTP sent successfully via Twilio Verify to: $_normalizedPhone');
+      }
       
       setState(() {
         _isLoading = false;
         _currentStep = 1;
-        // Get OTP from API response (backend returns OTP in response for development)
-        _receivedOTP = otpResponse['otp']?.toString() ?? '';
       });
 
       if (mounted) {
-        final otpMessage = (_receivedOTP?.isNotEmpty ?? false)
-            ? 'OTP sent: $_receivedOTP'
-            : 'OTP sent to your phone';
-        
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(otpMessage),
+          const SnackBar(
+            content: Text('OTP sent to your phone. Please check your SMS.'),
             backgroundColor: AppColors.info,
-            duration: const Duration(seconds: 3),
+            duration: Duration(seconds: 3),
           ),
         );
-
-        // Auto-fill OTP after short delay if OTP is available
-        if (_receivedOTP?.isNotEmpty ?? false) {
-          Future.delayed(const Duration(milliseconds: 500), () {
-            if (mounted && _currentStep == 1) {
-              _autoFillOTP();
-            }
-          });
-        }
       }
     } catch (e) {
       setState(() {
@@ -241,9 +251,17 @@ class _AuthScreenState extends State<AuthScreen> {
       });
 
       if (mounted) {
-        final errorMsg = e.toString().contains('404')
-            ? 'Phone number not registered. Please contact administrator.'
-            : 'Failed to send OTP. Please try again.';
+        String errorMsg = 'Failed to send OTP. Please try again.';
+        
+        // Handle specific Twilio Verify errors
+        if (e.toString().contains('404') || e.toString().contains('not registered')) {
+          errorMsg = 'Phone number not registered. Please contact administrator.';
+        } else if (e.toString().contains('Twilio') || e.toString().contains('SMS service')) {
+          errorMsg = 'SMS service temporarily unavailable. Please try again later.';
+        } else if (e.toString().contains('Invalid phone')) {
+          errorMsg = 'Invalid phone number format. Please check and try again.';
+        }
+        
         _showError('OTP Error', errorMsg);
       }
     }
@@ -255,8 +273,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _handleOTPVerify() async {
     final otp = _enteredOTP;
-    if (otp.length != 4) {
-      _showError('Invalid OTP', 'Please enter the 4-digit OTP');
+    if (otp.length != 6) {
+      _showError('Invalid OTP', 'Please enter the 6-digit OTP');
       return;
     }
 
@@ -265,53 +283,127 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      // Use /api/auth/login-phone endpoint
-      final response = await apiService.loginPhone(
-        phone: _normalizedPhone,
-        otp: otp,
+      // Ensure we're using the entered phone, not stored phone
+      if (_normalizedPhone.isEmpty) {
+        // Reconstruct from controller if somehow empty
+        final phoneDigits = _phoneController.text.replaceAll(RegExp(r'[^\d]'), '');
+        _normalizedPhone = '$_selectedCountryCode$phoneDigits';
+        if (kDebugMode) {
+          print('⚠️ _normalizedPhone was empty during verify, reconstructed: $_normalizedPhone');
+        }
+      }
+      
+      if (kDebugMode) {
+        print('🔐 Verifying OTP via Twilio Verify');
+        print('📱 Phone: $_normalizedPhone');
+        // Note: OTP is hidden in logs for security
+      }
+      
+      // Call POST /auth/verify-otp with phone + otp
+      // Backend will verify OTP via Twilio Verify API
+      final response = await apiService.verifyOTP(
+        _normalizedPhone,
+        otp,
       );
-
+      
       setState(() {
         _isLoading = false;
       });
 
       if (mounted) {
-        if (response['success'] == true && response['token'] != null) {
+        if (response['success'] == true && (response['token'] != null || response['accessToken'] != null)) {
           final user = response['user'];
-          // Extract role from response (backend returns role at top level and in user object)
-          final role = (response['role'] ?? user['role'] ?? 'buyer').toString().toLowerCase();
+          final role = (response['role'] ?? user?['role'] ?? 'buyer').toString().toLowerCase();
           
-          print('✅ Login successful - Token saved');
-          print('🧠 Role detected: $role');
-          print('   User ID: ${user['id']}');
-          print('   User Name: ${user['name'] ?? 'N/A'}');
-          print('   User Email: ${user['email'] ?? 'N/A'}');
+          if (kDebugMode) {
+            print('✅ OTP verified successfully - Login successful');
+            print('🧠 Role detected: $role');
+            print('   User ID: ${user?['id'] ?? 'N/A'}');
+            print('   User Name: ${user?['name'] ?? 'N/A'}');
+            print('   User Email: ${user?['email'] ?? 'N/A'}');
+          }
           
+          // Note: verifyOTP already saves tokens and user data in api_service.dart
           // Verify token was saved
           final savedToken = await StorageService.getToken();
           if (savedToken == null) {
-            print('⚠️ Warning: Token not found in storage, saving again...');
-            await StorageService.saveToken(response['token'] as String);
+            if (kDebugMode) {
+              print('⚠️ Warning: Token not found in storage');
+            }
+            // Save token if not already saved by verifyOTP
+            final accessToken = response['accessToken'] ?? response['token'];
+            if (accessToken != null) {
+              await StorageService.saveToken(accessToken as String);
+            }
           }
           
-          // Save user data (ensure role is saved correctly)
-          await StorageService.saveUserData(
-            userId: user['id'] as int,
-            role: role,
-            phone: user['phone'] as String,
-            name: user['name'] as String?,
-            email: user['email'] as String?,
-          );
+          // 🔧 FIX: Ensure user data is saved even if verifyOTP didn't save it
+          final savedUserId = await StorageService.getUserId();
+          final savedPhone = await StorageService.getUserPhone();
           
-          // Verify role was saved
-          final savedRole = await StorageService.getUserRole();
-          print('   Verified saved role: $savedRole');
+          if (savedUserId == null || savedPhone == null) {
+            if (kDebugMode) {
+              print('⚠️ Warning: User data not found in storage after OTP verification');
+              print('   Attempting to save user data from response...');
+            }
+            
+            if (user != null && user['id'] != null) {
+              // Save user data from response
+              await StorageService.saveUserData(
+                userId: user['id'] as int,
+                role: role,
+                phone: _normalizedPhone,
+                name: user['name'] as String?,
+                email: user['email'] as String?,
+              );
+              if (kDebugMode) {
+                print('✅ User data saved from response');
+              }
+            } else {
+              // If user data is missing from response, try to fetch from profile
+              if (kDebugMode) {
+                print('⚠️ User data missing from response, fetching from profile endpoint...');
+              }
+              try {
+                final profile = await apiService.getProfile();
+                await StorageService.saveUserData(
+                  userId: profile.id,
+                  role: role,
+                  phone: _normalizedPhone,
+                  name: profile.name,
+                  email: profile.email,
+                );
+                if (kDebugMode) {
+                  print('✅ User data fetched and saved from profile endpoint');
+                }
+              } catch (e) {
+                if (kDebugMode) {
+                  print('❌ Failed to fetch user profile: $e');
+                }
+                // Still save what we have (at least phone and role)
+                await StorageService.saveUserData(
+                  userId: 0, // Temporary - will be updated later
+                  role: role,
+                  phone: _normalizedPhone,
+                  name: null,
+                  email: null,
+                );
+              }
+            }
+          } else {
+            if (kDebugMode) {
+              print('✅ User data already saved in storage');
+              print('   User ID: $savedUserId');
+              print('   Phone: $savedPhone');
+            }
+          }
 
           // Show success message
           if (mounted) {
+            final userName = user?['name'] as String?;
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Login successful! Welcome ${user['name'] ?? 'to BidMaster'}'),
+                content: Text('Login successful! Welcome ${userName ?? 'to BidMaster'}'),
                 backgroundColor: AppColors.success,
                 duration: const Duration(seconds: 2),
               ),
@@ -323,52 +415,30 @@ class _AuthScreenState extends State<AuthScreen> {
 
           if (!mounted) return;
 
-          // Dev mode: Skip profile setup redirect for auto-login
-          if (AUTO_LOGIN_ENABLED && kDebugMode) {
-            print('🧠 Dev mode active - skipping profile setup redirect');
-            
-            // Redirect based on role (skip profile setup in dev mode)
-            if (role == 'buyer') {
-              print('🧭 Redirecting to BuyerDashboard()');
-              context.go('/home');
-            } else if (role == 'seller') {
-              print('🧭 Redirecting to SellerDashboard()');
-              context.go('/seller-dashboard');
-            } else {
-              // Admin roles (superadmin, moderator, viewer) - redirect to role-selection
-              // They can choose to be buyer or seller
-              print('🧭 Redirecting to RoleSelection (admin role)');
-              context.go('/role-selection');
-            }
-          } else {
-            // Production mode: Check profile completion
-            final userName = user['name'] as String?;
-            final userEmail = user['email'] as String?;
-            
-            if (userName == null || userEmail == null) {
-              // Profile incomplete - redirect to profile setup
+          // Always show role selection screen after login
+          final userName = user?['name'] as String?;
+          final userEmail = user?['email'] as String?;
+          
+          if (userName == null || userEmail == null) {
+            // Profile incomplete - redirect to profile setup first
+            if (kDebugMode) {
               print('🧭 Redirecting to ProfileSetup (incomplete profile)');
-              context.go('/profile-setup', extra: {'role': role});
-            } else {
-              // Profile complete - redirect based on role
-              if (role == 'buyer') {
-                print('🧭 Redirecting to BuyerDashboard()');
-                context.go('/home');
-              } else if (role == 'seller') {
-                print('🧭 Redirecting to SellerDashboard()');
-                context.go('/seller-dashboard');
-              } else {
-                // Admin or unknown role - go to role selection
-                print('🧭 Redirecting to RoleSelection (unknown role: $role)');
-                context.go('/role-selection');
-              }
             }
+            context.go('/profile-setup', extra: {'role': role});
+          } else {
+            // Profile complete - always show role selection to let user choose buyer/seller
+            if (kDebugMode) {
+              print('🧭 Redirecting to RoleSelection (user can choose buyer or seller)');
+            }
+            context.go('/role-selection');
           }
         } else {
-          print('⚠️ Navigation blocked - Missing role or token');
-          print('   Response success: ${response['success']}');
-          print('   Token present: ${response['token'] != null}');
-          _showError('Login failed', response['message'] ?? 'Invalid OTP. Please try again.');
+          if (kDebugMode) {
+            print('⚠️ OTP verification failed');
+            print('   Response success: ${response['success']}');
+            print('   Token present: ${response['token'] != null || response['accessToken'] != null}');
+          }
+          _showError('Verification failed', response['message'] ?? 'Invalid OTP. Please try again.');
         }
       }
     } catch (e) {
@@ -380,9 +450,19 @@ class _AuthScreenState extends State<AuthScreen> {
       if (_otpAttempts >= _maxOTPAttempts) {
         _showError('Too many failed attempts', 'Please request a new OTP');
       } else {
-        final errorMsg = e.toString().contains('404') 
-            ? 'Phone number not registered. Please contact administrator.'
-            : 'Login failed. Please check your OTP and try again.';
+        String errorMsg = 'Invalid OTP. Please check and try again.';
+        
+        // Handle specific Twilio Verify errors
+        if (e.toString().contains('404') || e.toString().contains('not registered')) {
+          errorMsg = 'Phone number not registered. Please contact administrator.';
+        } else if (e.toString().contains('Invalid OTP') || e.toString().contains('expired')) {
+          errorMsg = 'Invalid or expired OTP. Please request a new OTP.';
+        } else if (e.toString().contains('401') || e.toString().contains('Unauthorized')) {
+          errorMsg = 'Invalid OTP. Please check the code and try again.';
+        } else if (e.toString().contains('Twilio') || e.toString().contains('SMS service')) {
+          errorMsg = 'SMS service temporarily unavailable. Please try again later.';
+        }
+        
         _showError('Verification error', errorMsg);
       }
     }
@@ -398,34 +478,43 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      // Call actual sendOTP API
-      final otpResponse = await apiService.sendOTP(_normalizedPhone);
+      // Ensure _normalizedPhone is set from entered phone, not stored
+      if (_normalizedPhone.isEmpty) {
+        // Reconstruct from controller if somehow empty
+        final phoneDigits = _phoneController.text.replaceAll(RegExp(r'[^\d]'), '');
+        _normalizedPhone = '$_selectedCountryCode$phoneDigits';
+        if (kDebugMode) {
+          print('⚠️ _normalizedPhone was empty, reconstructed: $_normalizedPhone');
+        }
+      }
+      
+      if (kDebugMode) {
+        print('📤 Resending OTP to: $_normalizedPhone');
+      }
+      
+      // Call POST /auth/send-otp via Twilio Verify
+      await apiService.sendOTP(_normalizedPhone);
+      if (kDebugMode) {
+        print('✅ OTP resent successfully via Twilio Verify to: $_normalizedPhone');
+      }
       
       setState(() {
         _isLoading = false;
-        _receivedOTP = otpResponse['otp']?.toString() ?? '';
+        // Clear OTP fields for new entry
+        for (var controller in _otpControllers) {
+          controller.clear();
+        }
+        _otpController.clear();
       });
 
       if (mounted) {
-        final otpMessage = (_receivedOTP?.isNotEmpty ?? false)
-            ? 'OTP resent: $_receivedOTP'
-            : 'OTP resent to your phone';
-        
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(otpMessage),
+          const SnackBar(
+            content: Text('OTP resent to your phone. Please check your SMS.'),
             backgroundColor: AppColors.info,
+            duration: Duration(seconds: 3),
           ),
         );
-
-        // Auto-fill OTP if available
-        if (_receivedOTP?.isNotEmpty ?? false) {
-          Future.delayed(const Duration(milliseconds: 500), () {
-            if (mounted) {
-              _autoFillOTP();
-            }
-          });
-        }
       }
     } catch (e) {
       setState(() {
@@ -433,9 +522,17 @@ class _AuthScreenState extends State<AuthScreen> {
       });
 
       if (mounted) {
-        final errorMsg = e.toString().contains('404')
-            ? 'Phone number not registered. Please contact administrator.'
-            : 'Failed to resend OTP. Please try again.';
+        String errorMsg = 'Failed to resend OTP. Please try again.';
+        
+        // Handle specific Twilio Verify errors
+        if (e.toString().contains('404') || e.toString().contains('not registered')) {
+          errorMsg = 'Phone number not registered. Please contact administrator.';
+        } else if (e.toString().contains('Twilio') || e.toString().contains('SMS service')) {
+          errorMsg = 'SMS service temporarily unavailable. Please try again later.';
+        } else if (e.toString().contains('Invalid phone')) {
+          errorMsg = 'Invalid phone number format. Please check and try again.';
+        }
+        
         _showError('Resend OTP Error', errorMsg);
       }
     }
@@ -458,27 +555,6 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  void _autoFillOTP() {
-    if (_receivedOTP == null || _receivedOTP!.length != 4) return;
-    
-    setState(() {
-      for (int i = 0; i < 4; i++) {
-        if (i < _receivedOTP!.length) {
-          _otpControllers[i].text = _receivedOTP![i];
-        }
-      }
-      _otpController.text = _receivedOTP!;
-    });
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('OTP auto-filled. Click Verify & Continue to proceed'),
-          backgroundColor: AppColors.info,
-        ),
-      );
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -634,7 +710,7 @@ class _AuthScreenState extends State<AuthScreen> {
         const SizedBox(height: 8),
 
         Text(
-          "OTP sent to your phone",
+          "OTP will be sent to your phone via SMS",
           style: Theme.of(context).textTheme.bodySmall,
         ),
 
@@ -691,17 +767,17 @@ class _AuthScreenState extends State<AuthScreen> {
         // OTP Input Label
         Center(
           child: Text(
-            'Enter 4-digit OTP',
+            'Enter 6-digit OTP',
             style: Theme.of(context).textTheme.titleMedium,
           ),
         ),
 
         const SizedBox(height: 24),
 
-        // OTP Input (4 digits for backend)
+        // OTP Input (6 digits for backend)
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(4, (index) {
+          children: List.generate(6, (index) {
             return Container(
               width: 48,
               height: 56,
@@ -747,6 +823,8 @@ class _AuthScreenState extends State<AuthScreen> {
                   }
                   // Update the main controller for verification check
                   _otpController.text = _enteredOTP;
+                  // Trigger rebuild to enable/disable verify button
+                  setState(() {});
                 },
               ),
             );
@@ -783,7 +861,7 @@ class _AuthScreenState extends State<AuthScreen> {
         SizedBox(
           height: 48,
           child: ElevatedButton(
-            onPressed: _isLoading || _enteredOTP.length != 4
+            onPressed: _isLoading || _enteredOTP.length != 6
                 ? null
                 : _handleOTPVerify,
             style: ElevatedButton.styleFrom(
@@ -839,4 +917,3 @@ class CountryCode {
     required this.maxLength,
   });
 }
-

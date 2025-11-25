@@ -1,30 +1,74 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:http_parser/http_parser.dart';
 import '../models/user_model.dart';
 import '../models/product_model.dart';
 import '../models/bid_model.dart';
 import '../models/notification_model.dart';
 import 'storage_service.dart';
+import 'token_refresh_interceptor.dart';
+import '../utils/jwt_utils.dart';
 
 class ApiService {
-  // Use local backend for development (web) to avoid CORS issues
-  // Use production backend for mobile apps and production builds
+  // Dynamic base URL based on debug/release mode
+  // Debug: localhost (for local development)
+  // Release: Production server URL or local network IP
   static String get baseUrl {
-    if (kIsWeb) {
-      // For web development, use local backend to avoid CORS
-      // Change this to your local backend URL if different
+    if (kDebugMode) {
+      // Debug mode: use localhost
       return 'http://localhost:5000/api';
+    } else {
+      // Release mode: Use production server URL
+      // CRITICAL: Must be set via --dart-define=API_BASE_URL=your_url
+      const String productionUrl = String.fromEnvironment(
+        'API_BASE_URL',
+        defaultValue: '',
+      );
+      
+      // In release mode, API URL must be explicitly set
+      // If not set, use a placeholder that will cause clear error on first API call
+      if (productionUrl.isEmpty) {
+        // Return a placeholder that will fail with clear error message
+        // This allows app to start but will fail on first API call with helpful message
+        return 'API_BASE_URL_NOT_CONFIGURED';
+      }
+      
+      // Validate URL format
+      if (!productionUrl.startsWith('http://') && !productionUrl.startsWith('https://')) {
+        throw Exception(
+          'Invalid API_BASE_URL format. Must start with http:// or https://. '
+          'Current value: $productionUrl'
+        );
+      }
+      
+      return productionUrl;
     }
-    // For mobile apps, use production API
-    return 'https://bidmaster-api.onrender.com/api';
   }
   
   late Dio _dio;
 
   ApiService() {
-    print('🌐 API Service initialized');
-    print('   Platform: ${kIsWeb ? "Web" : "Mobile"}');
-    print('   Base URL: $baseUrl');
+    if (kDebugMode) {
+      print('🌐 API Service initialized');
+      print('   Platform: ${kIsWeb ? "Web" : "Mobile"}');
+      print('   Base URL: $baseUrl');
+    } else {
+      // In release mode, API URL is validated in baseUrl getter
+      // No additional validation needed here
+    }
+    
+    // Validate baseUrl before creating Dio instance
+    if (baseUrl == 'API_BASE_URL_NOT_CONFIGURED') {
+      throw Exception(
+        'API_BASE_URL not configured for release build.\n\n'
+        'To fix this, build with:\n'
+        'flutter build apk --release --dart-define=API_BASE_URL=https://your-server.com/api\n\n'
+        'Or for local network testing:\n'
+        'flutter build apk --release --dart-define=API_BASE_URL=http://YOUR_LOCAL_IP:5000/api'
+      );
+    }
     
     _dio = Dio(BaseOptions(
       baseUrl: baseUrl,
@@ -35,45 +79,50 @@ class ApiService {
         'Accept': 'application/json',
       },
     ));
+    
+    // Add error interceptor to prevent crashes
+    _dio.interceptors.add(InterceptorsWrapper(
+      onError: (error, handler) {
+        if (kDebugMode) {
+          print('❌ API Error: ${error.message}');
+        }
+        // Don't let errors crash the app
+        handler.next(error);
+      },
+    ));
 
-    // Add request interceptor to inject JWT token
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) async {
-          final token = await StorageService.getToken();
-          if (token != null) {
-            options.headers['Authorization'] = 'Bearer $token';
-          }
-          return handler.next(options);
-        },
-        onError: (error, handler) {
-          if (error.response?.statusCode == 401) {
-            // Token expired or invalid - clear storage
-            StorageService.clearAll();
-          }
-          return handler.next(error);
-        },
-      ),
-    );
+    // Add token refresh interceptor (handles auto-refresh and retry)
+    final refreshInterceptor = TokenRefreshInterceptor();
+    refreshInterceptor.setBaseUrl(baseUrl);
+    _dio.interceptors.add(refreshInterceptor);
   }
 
   // ==================== AUTHENTICATION ====================
 
   /// POST /api/auth/send-otp
-  /// ✅ LIVE: Connects to backend database
+  /// ✅ LIVE: Uses Twilio Verify API to send OTP
   Future<Map<String, dynamic>> sendOTP(String phone) async {
     try {
-      print('✅ Connected to live DB - Sending OTP');
-      print('   Phone: $phone');
+      if (kDebugMode) {
+        print('📤 Sending OTP via Twilio Verify');
+        print('📱 Phone number: $phone');
+        print('📱 Phone format: ${phone.startsWith('+964') ? 'Valid Iraq format' : 'Invalid format'}');
+      }
       
       final response = await _dio.post('/auth/send-otp', data: {'phone': phone});
       
-      print('✅ OTP sent successfully');
-      print('   OTP: ${response.data['otp'] ?? 'Sent via SMS'}');
+      if (kDebugMode) {
+        print('✅ OTP sent successfully via Twilio Verify');
+        print('📱 OTP sent to phone: $phone');
+        // Note: Backend does NOT return OTP in response for security
+      }
       
       return response.data;
     } catch (e) {
-      print('❌ Send OTP error: $e');
+      if (kDebugMode) {
+        print('❌ Send OTP error: $e');
+        print('📱 Failed to send OTP to phone: $phone');
+      }
       throw _handleError(e);
     }
   }
@@ -85,9 +134,11 @@ class ApiService {
     required String otp,
   }) async {
     try {
-      print('✅ Connected to live DB - Phone + OTP login');
-      print('   Phone: $phone');
-      print('   OTP: $otp');
+      if (kDebugMode) {
+        print('✅ Connected to live DB - Phone + OTP login');
+        print('   Phone: $phone');
+        print('   OTP: $otp');
+      }
       
       // Validate phone format before sending
       if (phone.isEmpty) {
@@ -110,8 +161,10 @@ class ApiService {
         }
       }
       
-      print('   Normalized Phone: $normalizedPhone');
-      print('   Request Body: {phone: $normalizedPhone, otp: $otp}');
+      if (kDebugMode) {
+        print('   Normalized Phone: $normalizedPhone');
+        print('   Request Body: {phone: $normalizedPhone, otp: $otp}');
+      }
       
       final response = await _dio.post(
         '/auth/login-phone',
@@ -121,61 +174,159 @@ class ApiService {
         },
       );
       
-      print('✅ JWT verified - Login successful');
-      print('   User ID: ${response.data['user']?['id']}');
-      print('   Role (from user): ${response.data['user']?['role']}');
-      print('   Role (from response): ${response.data['role']}');
+      if (kDebugMode) {
+        print('✅ JWT verified - Login successful');
+        print('   User ID: ${response.data['user']?['id']}');
+        print('   Role (from user): ${response.data['user']?['role']}');
+        print('   Role (from response): ${response.data['role']}');
+      }
       
       // Extract role from response (backend returns role at top level and in user object)
       final role = (response.data['role'] ?? response.data['user']?['role'] ?? 'buyer').toString().toLowerCase();
-      print('   Final role: $role');
+      if (kDebugMode) {
+        print('   Final role: $role');
+      }
       
-      // Save token and user data
-      if (response.data['token'] != null) {
-        await StorageService.saveToken(response.data['token'] as String);
-        print('✅ Token saved to storage');
+      // Save tokens and user data
+      final accessToken = response.data['accessToken'] ?? response.data['token'];
+      final refreshToken = response.data['refreshToken'];
+      
+      if (accessToken != null) {
+        // CRITICAL FIX: Validate token role matches response role
+        final tokenRole = JwtUtils.getRoleFromToken(accessToken as String);
+        if (tokenRole != null && tokenRole != role) {
+          if (kDebugMode) {
+            print('⚠️ WARNING: Token role mismatch detected!');
+            print('   Token role: $tokenRole');
+            print('   Response role: $role');
+            print('   This should not happen - backend token role should match response role');
+          }
+        }
+        
+        // CRITICAL FIX: Clear old tokens if they exist and have wrong role
+        final oldAccessToken = await StorageService.getAccessToken();
+        if (oldAccessToken != null) {
+          final oldTokenRole = JwtUtils.getRoleFromToken(oldAccessToken);
+          if (oldTokenRole != null && oldTokenRole != role) {
+            if (kDebugMode) {
+              print('⚠️ Clearing old tokens with wrong role ($oldTokenRole != $role)');
+            }
+            await StorageService.clearAllTokens();
+          }
+        }
+        
+        if (refreshToken != null) {
+          await StorageService.saveTokens(
+            accessToken: accessToken as String,
+            refreshToken: refreshToken as String,
+          );
+          if (kDebugMode) {
+            print('✅ Access and refresh tokens saved to storage');
+          }
+          
+          // Verify token role matches stored role
+          final savedTokenRole = JwtUtils.getRoleFromToken(accessToken as String);
+          if (kDebugMode) {
+            if (savedTokenRole != null && savedTokenRole == role) {
+              print('   ✅ Token role verified: $savedTokenRole');
+            } else {
+              print('   ⚠️ Warning: Token role mismatch after save');
+            }
+          }
+        } else {
+          // Fallback: only access token (backward compatibility)
+          await StorageService.saveAccessToken(accessToken as String);
+          if (kDebugMode) {
+            print('✅ Access token saved to storage (no refresh token)');
+          }
+        }
         
         // Verify token was saved
-        final savedToken = await StorageService.getToken();
-        if (savedToken != null) {
-          print('   Token verified in storage');
-        } else {
-          print('⚠️ Warning: Token not found after save');
+        final savedToken = await StorageService.getAccessToken();
+        if (kDebugMode) {
+          if (savedToken != null) {
+            print('   Access token verified in storage');
+          } else {
+            print('⚠️ Warning: Token not found after save');
+          }
         }
       } else {
-        print('❌ Error: No token in response');
+        if (kDebugMode) {
+          print('❌ Error: No token in response');
+        }
         throw Exception('No token received from server');
       }
       
       if (response.data['user'] != null) {
         final user = response.data['user'];
+        final backendPhone = user['phone'] as String?;
+        
+        // CRITICAL FIX: Use the phone number that was used for login, not necessarily backend phone
+        // Backend phone should match, but if there's a normalization difference, use login phone
+        // CRITICAL FIX: Log phone number comparison and warn if mismatch
+        if (backendPhone != null && backendPhone != normalizedPhone) {
+          if (kDebugMode) {
+            print('⚠️⚠️⚠️ CRITICAL: Phone number mismatch detected! ⚠️⚠️⚠️');
+            print('   📱 Phone entered by user: $normalizedPhone');
+            print('   📱 Phone from database: $backendPhone');
+            print('   ⚠️ This can cause OTP to be sent to wrong number!');
+            print('   ✅ FIX: Saving entered phone ($normalizedPhone) to ensure OTP goes to correct number');
+            print('   💡 If OTP is going to wrong number, check database phone for user ID: ${user['id']}');
+          }
+        } else {
+          if (kDebugMode) {
+            print('✅ Phone numbers match: $normalizedPhone');
+          }
+        }
+        
         await StorageService.saveUserData(
           userId: user['id'] as int,
           role: role, // Use extracted role
-          phone: user['phone'] as String,
+          phone: normalizedPhone, // CRITICAL: Always save the phone that was used for login
           name: user['name'] as String?,
           email: user['email'] as String?,
         );
-        print('✅ User data saved to storage');
+        if (kDebugMode) {
+          print('✅ User data saved to storage');
+          print('📱 Saved phone number (for OTP): $normalizedPhone');
+        }
         
         // Verify role was saved
         final savedRole = await StorageService.getUserRole();
-        if (savedRole == role) {
-          print('   Role verified in storage: $savedRole');
-        } else {
-          print('⚠️ Warning: Role mismatch - saved: $savedRole, expected: $role');
+        if (kDebugMode) {
+          if (savedRole == role) {
+            print('   Role verified in storage: $savedRole');
+          } else {
+            print('⚠️ Warning: Role mismatch - saved: $savedRole, expected: $role');
+          }
+        }
+        
+        // Verify phone was saved correctly
+        final savedPhone = await StorageService.getUserPhone();
+        if (kDebugMode) {
+          if (savedPhone == normalizedPhone) {
+            print('   ✅ Phone verified in storage: $savedPhone');
+          } else {
+            print('⚠️ Warning: Phone mismatch - saved: $savedPhone, expected: $normalizedPhone');
+          }
         }
       } else {
-        print('❌ Error: No user data in response');
+        if (kDebugMode) {
+          print('❌ Error: No user data in response');
+        }
         throw Exception('No user data received from server');
       }
       
       return response.data;
     } catch (e) {
-      print('❌ Login phone error: $e');
+      if (kDebugMode) {
+        print('❌ Login phone error: $e');
+        if (e is DioException && e.response != null) {
+          print('   Status Code: ${e.response?.statusCode}');
+          print('   Response Data: ${e.response?.data}');
+        }
+      }
       if (e is DioException && e.response != null) {
-        print('   Status Code: ${e.response?.statusCode}');
-        print('   Response Data: ${e.response?.data}');
         final errorMessage = e.response?.data?['message'] ?? 'Login failed';
         throw Exception(errorMessage);
       }
@@ -184,28 +335,88 @@ class ApiService {
   }
 
   /// POST /api/auth/verify-otp
-  /// ✅ LIVE: Connects to backend database (legacy - use loginPhone instead)
+  /// ✅ LIVE: Uses Twilio Verify API to verify OTP
   Future<Map<String, dynamic>> verifyOTP(String phone, String otp) async {
     try {
-      print('✅ Connected to live DB - Verifying OTP');
-      print('   Phone: $phone');
+      if (kDebugMode) {
+        print('🔐 Verifying OTP via Twilio Verify');
+        print('📱 Phone: $phone');
+        print('🔑 OTP: [hidden]');
+      }
+      
+      // Normalize phone to match backend format
+      String normalizedPhone = phone.trim();
+      if (!normalizedPhone.startsWith('+964')) {
+        if (normalizedPhone.startsWith('964')) {
+          normalizedPhone = '+$normalizedPhone';
+        } else if (normalizedPhone.startsWith('0')) {
+          normalizedPhone = '+964${normalizedPhone.substring(1)}';
+        } else if (normalizedPhone.startsWith('00964')) {
+          normalizedPhone = '+964${normalizedPhone.substring(5)}';
+        } else {
+          throw Exception('Invalid phone format. Must start with +964');
+        }
+      }
       
       final response = await _dio.post(
         '/auth/verify-otp',
-        data: {'phone': phone, 'otp': otp},
+        data: {'phone': normalizedPhone, 'otp': otp},
       );
       
-      print('✅ JWT verified - OTP valid');
+      if (kDebugMode) {
+        print('✅ OTP verified successfully via Twilio Verify');
+        print('   User ID: ${response.data['user']?['id']}');
+        print('   Role: ${response.data['role'] ?? response.data['user']?['role']}');
+      }
       
-      // Save token if provided
-      if (response.data['token'] != null) {
-        await StorageService.saveToken(response.data['token']);
-        print('✅ Token saved to storage');
+      // Extract role from response
+      final role = (response.data['role'] ?? response.data['user']?['role'] ?? 'buyer').toString().toLowerCase();
+      
+      // Save tokens and user data
+      final accessToken = response.data['accessToken'] ?? response.data['token'];
+      final refreshToken = response.data['refreshToken'];
+      
+      if (accessToken != null) {
+        if (refreshToken != null) {
+          await StorageService.saveTokens(
+            accessToken: accessToken as String,
+            refreshToken: refreshToken as String,
+          );
+          if (kDebugMode) {
+            print('✅ Access and refresh tokens saved to storage');
+          }
+        } else {
+          await StorageService.saveAccessToken(accessToken as String);
+          if (kDebugMode) {
+            print('✅ Access token saved to storage');
+          }
+        }
+        
+        // Save user data
+        if (response.data['user'] != null) {
+          final user = response.data['user'];
+          await StorageService.saveUserData(
+            userId: user['id'] as int,
+            role: role,
+            phone: normalizedPhone,
+            name: user['name'] as String?,
+            email: user['email'] as String?,
+          );
+          if (kDebugMode) {
+            print('✅ User data saved to storage');
+          }
+        }
       }
       
       return response.data;
     } catch (e) {
-      print('❌ Verify OTP error: $e');
+      if (kDebugMode) {
+        print('❌ Verify OTP error: $e');
+        if (e is DioException && e.response != null) {
+          print('   Status Code: ${e.response?.statusCode}');
+          print('   Response Data: ${e.response?.data}');
+        }
+      }
       throw _handleError(e);
     }
   }
@@ -220,8 +431,10 @@ class ApiService {
     required String role,
   }) async {
     try {
-      print('✅ Connected to live DB - Registering user');
-      print('   Name: $name, Phone: $phone, Role: $role');
+      if (kDebugMode) {
+        print('✅ Connected to live DB - Registering user');
+        print('   Name: $name, Phone: $phone, Role: $role');
+      }
       
       final response = await _dio.post(
         '/auth/register',
@@ -234,14 +447,30 @@ class ApiService {
         },
       );
       
-      print('✅ JWT verified - User registered successfully');
-      print('   User ID: ${response.data['user']?['id']}');
-      print('   Token received: ${response.data['token'] != null ? 'Yes' : 'No'}');
+      if (kDebugMode) {
+        print('✅ JWT verified - User registered successfully');
+        print('   User ID: ${response.data['user']?['id']}');
+      }
       
-      // Save token and user data
-      if (response.data['token'] != null) {
-        await StorageService.saveToken(response.data['token']);
-        print('✅ Token saved to storage');
+      // Save tokens and user data
+      final accessToken = response.data['accessToken'] ?? response.data['token'];
+      final refreshToken = response.data['refreshToken'];
+      
+      if (accessToken != null) {
+        if (refreshToken != null) {
+          await StorageService.saveTokens(
+            accessToken: accessToken as String,
+            refreshToken: refreshToken as String,
+          );
+          if (kDebugMode) {
+            print('✅ Access and refresh tokens saved to storage');
+          }
+        } else {
+          await StorageService.saveAccessToken(accessToken as String);
+          if (kDebugMode) {
+            print('✅ Access token saved to storage');
+          }
+        }
       }
       
       if (response.data['user'] != null) {
@@ -253,14 +482,20 @@ class ApiService {
           name: user['name'] as String?,
           email: user['email'] as String?,
         );
-        print('✅ User data saved to storage');
+        if (kDebugMode) {
+          print('✅ User data saved to storage');
+        }
       }
       
-      print('✅ Fetched 1 record (new user)');
+      if (kDebugMode) {
+        print('✅ Fetched 1 record (new user)');
+      }
       
       return response.data;
     } catch (e) {
-      print('❌ Registration error: $e');
+      if (kDebugMode) {
+        print('❌ Registration error: $e');
+      }
       throw _handleError(e);
     }
   }
@@ -289,10 +524,21 @@ class ApiService {
       print('   User ID: ${response.data['user']?['id']}');
       print('   Role: ${response.data['user']?['role']}');
       
-      // Save token and user data
-      if (response.data['token'] != null) {
-        await StorageService.saveToken(response.data['token']);
-        print('✅ Token saved to storage');
+      // Save tokens and user data
+      final accessToken = response.data['accessToken'] ?? response.data['token'];
+      final refreshToken = response.data['refreshToken'];
+      
+      if (accessToken != null) {
+        if (refreshToken != null) {
+          await StorageService.saveTokens(
+            accessToken: accessToken as String,
+            refreshToken: refreshToken as String,
+          );
+          print('✅ Access and refresh tokens saved to storage');
+        } else {
+          await StorageService.saveAccessToken(accessToken as String);
+          print('✅ Access token saved to storage');
+        }
       }
       if (response.data['user'] != null) {
         final user = response.data['user'];
@@ -309,6 +555,30 @@ class ApiService {
       return response.data;
     } catch (e) {
       print('❌ Login error: $e');
+      throw _handleError(e);
+    }
+  }
+
+  /// POST /api/auth/refresh
+  /// ✅ Refresh access token using refresh token
+  Future<Map<String, dynamic>> refreshToken(String refreshToken) async {
+    try {
+      print('🔄 Refreshing access token...');
+      
+      final response = await _dio.post(
+        '/auth/refresh',
+        data: {'refreshToken': refreshToken},
+      );
+      
+      if (response.data['success'] == true) {
+        print('✅ Token refreshed successfully');
+      } else {
+        print('⚠️ Token refresh returned success: false');
+      }
+      
+      return response.data;
+    } catch (e) {
+      print('❌ Refresh token error: $e');
       throw _handleError(e);
     }
   }
@@ -333,21 +603,70 @@ class ApiService {
 
   /// PATCH /api/auth/profile
   /// ✅ LIVE: Updates database
-  Future<UserModel> updateProfile({String? name, String? phone}) async {
+  /// When role is updated, backend returns new tokens that must be saved
+  Future<UserModel> updateProfile({String? name, String? phone, String? role}) async {
     try {
       print('✅ Connected to live DB - Updating profile');
-      print('   Name: $name, Phone: $phone');
+      print('   Name: $name, Phone: $phone, Role: $role');
       
       final response = await _dio.patch(
         '/auth/profile',
         data: {
           if (name != null) 'name': name,
           if (phone != null) 'phone': phone,
+          if (role != null) 'role': role, // 🔧 FIX: Allow role updates
         },
       );
       
       print('✅ JWT verified');
       print('✅ Profile updated in database');
+      
+      // 🔧 FIX: If role was updated, backend returns new tokens - save them
+      if (role != null && response.data['accessToken'] != null) {
+        final newAccessToken = response.data['accessToken'] as String;
+        final newRefreshToken = response.data['refreshToken'] as String;
+        final updatedRole = (response.data['role'] ?? role).toString().toLowerCase();
+        
+        print('✅ New tokens received after role update');
+        print('   Updated role: $updatedRole');
+        
+        // Verify token role matches updated role
+        final tokenRole = JwtUtils.getRoleFromToken(newAccessToken);
+        if (tokenRole != null && tokenRole != updatedRole) {
+          print('⚠️ WARNING: New token role ($tokenRole) != Updated role ($updatedRole)');
+        } else {
+          print('   ✅ Token role verified: $tokenRole');
+        }
+        
+        // Save new tokens
+        await StorageService.saveTokens(
+          accessToken: newAccessToken,
+          refreshToken: newRefreshToken,
+        );
+        print('✅ New tokens saved to storage');
+        
+        // Update role in SharedPreferences to match token
+        final userData = response.data['data'] as Map<String, dynamic>;
+        await StorageService.saveUserData(
+          userId: userData['id'] as int,
+          role: updatedRole,
+          phone: userData['phone'] as String? ?? await StorageService.getUserPhone() ?? '',
+          name: userData['name'] as String?,
+          email: userData['email'] as String?,
+        );
+        print('✅ Role updated in SharedPreferences: $updatedRole');
+        
+        // Verify everything is in sync
+        final savedTokenRole = JwtUtils.getRoleFromToken(newAccessToken);
+        final savedRole = await StorageService.getUserRole();
+        if (savedTokenRole != null && savedRole != null && savedTokenRole == savedRole) {
+          print('   ✅ Token role and SharedPreferences role are in sync: $savedRole');
+        } else {
+          print('⚠️ Warning: Role mismatch after update');
+          print('   Token role: $savedTokenRole');
+          print('   SharedPreferences role: $savedRole');
+        }
+      }
       
       return UserModel.fromJson(response.data['data']);
     } catch (e) {
@@ -517,6 +836,102 @@ class ApiService {
     }
   }
 
+  /// POST /api/uploads/image
+  /// ✅ Upload image file and return URL
+  /// Supports both File (mobile) and Uint8List (web)
+  Future<String> uploadImage(dynamic imageData, {String? filename}) async {
+    try {
+      final token = await StorageService.getToken();
+      if (token == null) {
+        throw Exception('Not authenticated');
+      }
+
+      MultipartFile multipartFile;
+      String contentType = 'image/jpeg';
+      String fileName = filename ?? 'image.jpg';
+
+      if (kIsWeb && imageData is Uint8List) {
+        // Web: Use bytes directly
+        print('📤 Uploading image from bytes (web): ${imageData.length} bytes');
+        
+        // Try to detect image type from bytes
+        if (imageData.length >= 4) {
+          // PNG signature: 89 50 4E 47
+          if (imageData[0] == 0x89 && imageData[1] == 0x50 && 
+              imageData[2] == 0x4E && imageData[3] == 0x47) {
+            contentType = 'image/png';
+            fileName = filename ?? 'image.png';
+          }
+          // JPEG signature: FF D8 FF
+          else if (imageData[0] == 0xFF && imageData[1] == 0xD8 && imageData[2] == 0xFF) {
+            contentType = 'image/jpeg';
+            fileName = filename ?? 'image.jpg';
+          }
+        }
+
+        multipartFile = MultipartFile.fromBytes(
+          imageData,
+          filename: fileName,
+          contentType: MediaType('image', contentType.split('/').last),
+        );
+      } else if (imageData is File) {
+        // Mobile: Use File
+        print('📤 Uploading image: ${imageData.path}');
+        
+        fileName = imageData.path.split('/').last;
+        final fileExtension = fileName.split('.').last.toLowerCase();
+        
+        // Determine content type
+        if (fileExtension == 'png') {
+          contentType = 'image/png';
+        } else if (fileExtension == 'gif') {
+          contentType = 'image/gif';
+        } else if (fileExtension == 'webp') {
+          contentType = 'image/webp';
+        }
+
+        multipartFile = await MultipartFile.fromFile(
+          imageData.path,
+          filename: fileName,
+          contentType: MediaType('image', fileExtension),
+        );
+      } else {
+        throw Exception('Invalid image data type. Expected File or Uint8List.');
+      }
+
+      // Create FormData for multipart upload
+      final formData = FormData.fromMap({
+        'image': multipartFile,
+      });
+
+      final response = await _dio.post(
+        '/uploads/image',
+        data: formData,
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'multipart/form-data',
+          },
+        ),
+      );
+
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final imageUrl = response.data['data']['url'] as String;
+        print('✅ Image uploaded successfully: $imageUrl');
+        return imageUrl;
+      } else {
+        throw Exception('Failed to upload image: ${response.data['message'] ?? 'Unknown error'}');
+      }
+    } catch (e) {
+      print('❌ Error uploading image: $e');
+      if (e is DioException && e.response != null) {
+        print('   Error Status Code: ${e.response!.statusCode}');
+        print('   Error Response Data: ${e.response!.data}');
+      }
+      throw _handleError(e);
+    }
+  }
+
   /// POST /api/products/create
   /// ✅ LIVE: Inserts into database
   Future<ProductModel> createProduct({
@@ -530,6 +945,41 @@ class ApiService {
     try {
       print('✅ Connected to live DB - Creating product');
       print('   Title: $title, Price: $startingPrice');
+      
+      // 🔍 DEEP TRACE: Before product creation
+      print('🔍 [DEEP TRACE] ApiService.createProduct() - BEFORE REQUEST');
+      
+      // Get current user info for debugging
+      final userId = await StorageService.getUserId();
+      final userRole = await StorageService.getUserRole();
+      print('   Current User ID: $userId');
+      print('   Current User Role: $userRole');
+      
+      // 🔍 DEEP TRACE: Get token directly
+      final accessToken = await StorageService.getAccessToken();
+      final refreshToken = await StorageService.getRefreshToken();
+      
+      if (accessToken != null) {
+        final tokenRole = JwtUtils.getRoleFromToken(accessToken);
+        final tokenUserId = JwtUtils.getUserIdFromToken(accessToken);
+        print('   🔍 Access Token Details:');
+        print('      Token role: $tokenRole');
+        print('      Token userId: $tokenUserId');
+        print('      Token length: ${accessToken.length}');
+        print('      Token preview: ${accessToken.substring(0, accessToken.length > 50 ? 50 : accessToken.length)}...');
+        print('   🔍 Refresh Token: ${refreshToken != null ? "Present (${refreshToken.length} chars)" : "NULL"}');
+        print('   🔍 Stored Role: $userRole');
+        
+        if (tokenRole != null && userRole != null && tokenRole != userRole) {
+          print('   ⚠️⚠️⚠️ CRITICAL MISMATCH BEFORE PRODUCT CREATE! ⚠️⚠️⚠️');
+          print('   ⚠️ Token role ($tokenRole) != Stored role ($userRole)');
+          print('   ⚠️ This will cause 403 Forbidden!');
+          print('   ⚠️ STACK TRACE:');
+          print(StackTrace.current);
+        }
+      } else {
+        print('   ⚠️ NO ACCESS TOKEN AVAILABLE!');
+      }
       
       final response = await _dio.post(
         '/products/create',
@@ -550,6 +1000,113 @@ class ApiService {
       return ProductModel.fromJson(response.data['data']);
     } catch (e) {
       print('❌ Error creating product: $e');
+      
+      // Log detailed error information
+      if (e is DioException && e.response != null) {
+        print('   Error Status Code: ${e.response!.statusCode}');
+        print('   Error Response Data: ${e.response!.data}');
+        final errorData = e.response!.data;
+        if (errorData is Map) {
+          print('   Error Message: ${errorData['message'] ?? errorData['error'] ?? 'Unknown error'}');
+        }
+      }
+      
+      throw _handleError(e);
+    }
+  }
+
+  /// PUT /api/products/:id
+  /// ✅ LIVE: Updates product in database (Seller can edit ONLY their own products)
+  Future<ProductModel> updateProduct({
+    required int id,
+    String? title,
+    String? description,
+    String? imageUrl,
+    double? startingPrice,
+    int? categoryId,
+  }) async {
+    try {
+      print('✅ Connected to live DB - Updating product: $id');
+      print('   Update data: title=${title != null ? "provided" : "null"}, description=${description != null ? "provided" : "null"}, imageUrl=${imageUrl != null ? "provided" : "null"}, startingPrice=${startingPrice != null ? startingPrice : "null"}');
+      
+      // Build request body - always include fields that are provided
+      final Map<String, dynamic> requestData = {};
+      
+      // Title is required for updates
+      if (title != null) {
+        requestData['title'] = title;
+      }
+      
+      // Description can be null (to clear it) or a string
+      if (description != null) {
+        requestData['description'] = description.isEmpty ? null : description;
+      }
+      
+      // Image URL: always send when provided (can be string URL or null to remove)
+      // The product_creation_screen always provides imageUrl when updating
+      if (imageUrl != null) {
+        requestData['image_url'] = imageUrl;
+      } else if (title != null) {
+        // If updating and imageUrl is explicitly null, send null to remove image
+        requestData['image_url'] = null;
+      }
+      
+      // Starting price is required for updates
+      if (startingPrice != null) {
+        requestData['startingPrice'] = startingPrice;
+      }
+      
+      if (categoryId != null) {
+        requestData['category_id'] = categoryId;
+      }
+      
+      print('   Request payload: $requestData');
+      
+      final response = await _dio.put(
+        '/products/$id',
+        data: requestData,
+      );
+      
+      print('✅ JWT verified');
+      print('✅ Product updated in database');
+      print('   Response: ${response.data}');
+      
+      if (response.data['success'] == true && response.data['data'] != null) {
+        return ProductModel.fromJson(response.data['data']);
+      } else {
+        throw Exception('Invalid response format from server');
+      }
+    } catch (e) {
+      print('❌ Error updating product: $e');
+      if (e is DioException && e.response != null) {
+        print('   Error Status Code: ${e.response!.statusCode}');
+        print('   Error Response Data: ${e.response!.data}');
+        final errorData = e.response!.data;
+        if (errorData is Map) {
+          print('   Error Message: ${errorData['message'] ?? errorData['error'] ?? 'Unknown error'}');
+        }
+      }
+      throw _handleError(e);
+    }
+  }
+
+  /// DELETE /api/products/:id
+  /// ✅ LIVE: Deletes product from database (Seller can delete ONLY their own products)
+  Future<void> deleteProduct(int id) async {
+    try {
+      print('✅ Connected to live DB - Deleting product: $id');
+      
+      final response = await _dio.delete('/products/$id');
+      
+      print('✅ JWT verified');
+      print('✅ Product deleted from database');
+      print('   Response: ${response.data}');
+    } catch (e) {
+      print('❌ Error deleting product: $e');
+      if (e is DioException && e.response != null) {
+        print('   Error Status Code: ${e.response!.statusCode}');
+        print('   Error Response Data: ${e.response!.data}');
+      }
       throw _handleError(e);
     }
   }
@@ -581,6 +1138,24 @@ class ApiService {
       return BidModel.fromJson(response.data['data']);
     } catch (e) {
       print('❌ Error placing bid: $e');
+      
+      // Better error handling for 400 errors
+      if (e is DioException && e.response != null) {
+        final statusCode = e.response?.statusCode;
+        final errorData = e.response?.data;
+        
+        if (statusCode == 400) {
+          final errorMessage = errorData is Map 
+              ? (errorData['message'] ?? errorData['error'] ?? 'Invalid bid request')
+              : 'Invalid bid request';
+          
+          print('   ⚠️ 400 Bad Request: $errorMessage');
+          print('   Response data: $errorData');
+          
+          throw Exception(errorMessage);
+        }
+      }
+      
       throw _handleError(e);
     }
   }
@@ -766,6 +1341,21 @@ class ApiService {
   }
 }
 
-// Singleton instance
-final apiService = ApiService();
+// Singleton instance - lazy initialization to prevent startup crashes
+ApiService? _apiServiceInstance;
+
+ApiService get apiService {
+  if (_apiServiceInstance == null) {
+    try {
+      _apiServiceInstance = ApiService();
+    } catch (e) {
+      // In release mode, if API URL is not configured, show clear error
+      if (kDebugMode) {
+        print('❌ API Service initialization failed: $e');
+      }
+      rethrow; // Re-throw to show error to user
+    }
+  }
+  return _apiServiceInstance!;
+}
 

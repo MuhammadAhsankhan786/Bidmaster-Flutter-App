@@ -1,22 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'app/router/app_router.dart';
 import 'app/theme/theme.dart';
 import 'app/services/storage_service.dart';
-import 'config/dev_config.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Safety check: Prevent auto-login in production builds
-  if (kReleaseMode && AUTO_LOGIN_ENABLED) {
-    throw Exception("❌ Auto-login must be disabled in production builds!");
+  // Error handling to prevent white screen
+  FlutterError.onError = (FlutterErrorDetails details) {
+    if (kDebugMode) {
+      FlutterError.presentError(details);
+    } else {
+      // In release mode, log error but don't crash
+      print('❌ Flutter Error: ${details.exception}');
+    }
+  };
+  
+  // Handle platform errors
+  PlatformDispatcher.instance.onError = (error, stack) {
+    if (kDebugMode) {
+      print('❌ Platform Error: $error');
+      print('Stack: $stack');
+    }
+    return true; // Prevent app from crashing
+  };
+  
+  try {
+    // Initialize SharedPreferences before any navigation
+    // This prevents white screen in release mode
+    await SharedPreferences.getInstance();
+    
+    // Check for existing session and auto-login
+    // Auto-login works in both debug and release mode (as per requirements)
+    await _checkAutoLogin();
+    
+    runApp(const MyApp());
+  } catch (e, stackTrace) {
+    // Catch any initialization errors
+    if (kDebugMode) {
+      print('❌ Initialization Error: $e');
+      print('Stack: $stackTrace');
+    }
+    // Still run app even if initialization fails
+    runApp(const MyApp());
   }
-  
-  // Check for existing session and auto-login
-  await _checkAutoLogin();
-  
-  runApp(const MyApp());
 }
 
 Future<void> _checkAutoLogin() async {

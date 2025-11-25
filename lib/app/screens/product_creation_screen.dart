@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'dart:typed_data';
 import '../theme/colors.dart';
 import '../services/api_service.dart';
+import '../services/storage_service.dart';
+import '../models/product_model.dart';
 
 class ProductCreationScreen extends StatefulWidget {
-  const ProductCreationScreen({super.key});
+  final ProductModel? productToEdit;
+  
+  const ProductCreationScreen({super.key, this.productToEdit});
 
   @override
   State<ProductCreationScreen> createState() => _ProductCreationScreenState();
@@ -15,22 +23,132 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _priceController = TextEditingController();
-  final _imageUrlController = TextEditingController();
+  final _imagePicker = ImagePicker();
   
   bool _isLoading = false;
   int _duration = 7;
+  File? _selectedImage;
+  Uint8List? _selectedImageBytes;
+  String? _existingImageUrl; // Store existing image URL for edit mode
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-fill form if editing
+    if (widget.productToEdit != null) {
+      final product = widget.productToEdit!;
+      _titleController.text = product.title;
+      _descriptionController.text = product.description ?? '';
+      _priceController.text = product.startingPrice.toString();
+      
+      // Load existing image URL
+      if (product.imageUrls.isNotEmpty) {
+        _existingImageUrl = product.imageUrls.first;
+      }
+    }
+  }
 
   @override
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
     _priceController.dispose();
-    _imageUrlController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+      
+      if (image != null) {
+        setState(() {
+          if (kIsWeb) {
+            // For web, read bytes directly
+            image.readAsBytes().then((bytes) {
+              if (mounted) {
+                setState(() {
+                  _selectedImageBytes = bytes;
+                });
+              }
+            });
+          } else {
+            // For mobile, use File
+            _selectedImage = File(image.path);
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error picking image: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _takePhoto() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+      
+      if (image != null) {
+        setState(() {
+          if (kIsWeb) {
+            // For web, read bytes directly
+            image.readAsBytes().then((bytes) {
+              if (mounted) {
+                setState(() {
+                  _selectedImageBytes = bytes;
+                });
+              }
+            });
+          } else {
+            // For mobile, use File
+            _selectedImage = File(image.path);
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error taking photo: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _createProduct() async {
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    // Check user role before attempting to create/update product
+    final userRole = await StorageService.getUserRole();
+    if (userRole != 'seller') {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Only sellers can ${widget.productToEdit != null ? 'edit' : 'create'} products. Your current role: ${userRole ?? 'unknown'}. Please contact support if you believe this is an error.'),
+            backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
       return;
     }
 
@@ -44,33 +162,96 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
         throw Exception('Invalid price');
       }
 
-      await apiService.createProduct(
-        title: _titleController.text.trim(),
-        description: _descriptionController.text.trim().isEmpty 
-            ? null 
-            : _descriptionController.text.trim(),
-        imageUrl: _imageUrlController.text.trim().isEmpty 
-            ? null 
-            : _imageUrlController.text.trim(),
-        startingPrice: price,
-        duration: _duration,
-      );
+      // Upload image first if a new image was selected
+      String? imageUrl;
+      bool imageRemoved = false;
+      
+      if (_selectedImage != null || _selectedImageBytes != null) {
+        // New image selected - upload it
+        if (kIsWeb && _selectedImageBytes != null) {
+          // For web, upload bytes directly
+          imageUrl = await apiService.uploadImage(_selectedImageBytes!, filename: 'product-image.png');
+          print('✅ Image uploaded: $imageUrl');
+        } else if (_selectedImage != null) {
+          // For mobile, upload File
+          imageUrl = await apiService.uploadImage(_selectedImage!);
+          print('✅ Image uploaded: $imageUrl');
+        }
+      } else if (widget.productToEdit != null) {
+        // Editing existing product
+        if (_existingImageUrl == null || _existingImageUrl!.isEmpty) {
+          // Image was removed by user
+          imageUrl = null;
+          imageRemoved = true;
+        } else {
+          // Keep existing image if no new image was selected and existing image exists
+          imageUrl = _existingImageUrl;
+        }
+      }
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Product created successfully! Pending admin approval.'),
-            backgroundColor: AppColors.success,
-          ),
+      if (widget.productToEdit != null) {
+        // Update existing product
+        // Always send title and startingPrice (required fields)
+        // Send imageUrl only if it changed (new upload, removed, or kept existing)
+        await apiService.updateProduct(
+          id: widget.productToEdit!.id,
+          title: _titleController.text.trim(),
+          description: _descriptionController.text.trim().isEmpty 
+              ? null 
+              : _descriptionController.text.trim(),
+          imageUrl: imageUrl, // Send null if removed, existing URL if kept, new URL if uploaded
+          startingPrice: price,
         );
-        context.pop(true); // Return true to indicate success
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Product updated successfully!'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+          context.pop(true); // Return true to indicate success
+        }
+      } else {
+        // Create new product
+        await apiService.createProduct(
+          title: _titleController.text.trim(),
+          description: _descriptionController.text.trim().isEmpty 
+              ? null 
+              : _descriptionController.text.trim(),
+          imageUrl: imageUrl,
+          startingPrice: price,
+          duration: _duration,
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Product created successfully! Pending admin approval.'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+          context.pop(true); // Return true to indicate success
+        }
       }
     } catch (e) {
       if (mounted) {
+        String errorMessage = widget.productToEdit != null 
+            ? 'Error updating product' 
+            : 'Error creating product';
+        if (e.toString().contains('403') || e.toString().contains('Forbidden')) {
+          errorMessage = 'Access denied. Only sellers can ${widget.productToEdit != null ? 'edit' : 'create'} products. Please verify your account role or contact support.';
+        } else if (e.toString().contains('Only sellers can')) {
+          errorMessage = 'Only sellers can ${widget.productToEdit != null ? 'edit' : 'create'} products. Your account may need to be updated. Please contact support.';
+        } else {
+          errorMessage = 'Error: ${e.toString()}';
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text(errorMessage),
             backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -87,10 +268,12 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final isEditMode = widget.productToEdit != null;
+    
     return Scaffold(
       backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
       appBar: AppBar(
-        title: const Text('Add New Listing'),
+        title: Text(isEditMode ? 'Edit Listing' : 'Add New Listing'),
         backgroundColor: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
       ),
       body: SafeArea(
@@ -168,23 +351,7 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
 
                 const SizedBox(height: 16),
 
-                // Image URL
-                TextFormField(
-                  controller: _imageUrlController,
-                  decoration: InputDecoration(
-                    labelText: 'Image URL',
-                    hintText: 'Enter image URL (optional)',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    filled: true,
-                    fillColor: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Duration
+                // Image Picker
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -198,35 +365,205 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Auction Duration',
+                        'Product Image',
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
+                      if (_selectedImage != null || _selectedImageBytes != null)
+                        Container(
+                          height: 200,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isDark ? AppColors.slate700 : AppColors.slate200,
+                            ),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: kIsWeb && _selectedImageBytes != null
+                                ? Image.memory(
+                                    _selectedImageBytes!,
+                                    fit: BoxFit.cover,
+                                  )
+                                : _selectedImage != null
+                                    ? Image.file(
+                                        _selectedImage!,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : const SizedBox(),
+                          ),
+                        )
+                      else if (_existingImageUrl != null && _existingImageUrl!.isNotEmpty)
+                        Container(
+                          height: 200,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isDark ? AppColors.slate700 : AppColors.slate200,
+                            ),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              _existingImageUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  color: isDark ? AppColors.slate900 : AppColors.slate100,
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.image_outlined,
+                                        size: 48,
+                                        color: isDark ? AppColors.slate600 : AppColors.slate400,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Failed to load image',
+                                        style: TextStyle(
+                                          color: isDark ? AppColors.slate600 : AppColors.slate400,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
+                          height: 200,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.slate900 : AppColors.slate100,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isDark ? AppColors.slate700 : AppColors.slate200,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.image_outlined,
+                                size: 48,
+                                color: isDark ? AppColors.slate600 : AppColors.slate400,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'No image selected',
+                                style: TextStyle(
+                                  color: isDark ? AppColors.slate600 : AppColors.slate400,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: 12),
                       Row(
                         children: [
                           Expanded(
-                            child: Text('$_duration days'),
+                            child: OutlinedButton.icon(
+                              onPressed: _pickImage,
+                              icon: const Icon(Icons.photo_library),
+                              label: const Text('Gallery'),
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(
+                                  color: isDark ? AppColors.slate700 : AppColors.slate300,
+                                ),
+                              ),
+                            ),
                           ),
-                          Slider(
-                            value: _duration.toDouble(),
-                            min: 1,
-                            max: 30,
-                            divisions: 29,
-                            onChanged: (value) {
-                              setState(() {
-                                _duration = value.toInt();
-                              });
-                            },
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _takePhoto,
+                              icon: const Icon(Icons.camera_alt),
+                              label: const Text('Camera'),
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(
+                                  color: isDark ? AppColors.slate700 : AppColors.slate300,
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
+                      if (_selectedImage != null || _selectedImageBytes != null || (_existingImageUrl != null && _existingImageUrl!.isNotEmpty))
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: TextButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _selectedImage = null;
+                                _selectedImageBytes = null;
+                                _existingImageUrl = null;
+                              });
+                            },
+                            icon: const Icon(Icons.delete_outline, size: 18),
+                            label: const Text('Remove Image'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.error,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
 
+                const SizedBox(height: 16),
+
+                // Duration (only show for new products, not when editing)
+                if (!isEditMode) ...[
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isDark ? AppColors.slate700 : AppColors.slate200,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Auction Duration',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text('$_duration days'),
+                            ),
+                            Slider(
+                              value: _duration.toDouble(),
+                              min: 1,
+                              max: 30,
+                              divisions: 29,
+                              onChanged: (value) {
+                                setState(() {
+                                  _duration = value.toInt();
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 const SizedBox(height: 24),
 
-                // Create Button
+                // Create/Update Button
                 SizedBox(
                   height: 48,
                   child: ElevatedButton(
@@ -247,7 +584,7 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
                               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           )
-                        : const Text('Create Listing'),
+                        : Text(isEditMode ? 'Update Listing' : 'Create Listing'),
                   ),
                 ),
 
@@ -284,4 +621,6 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
     );
   }
 }
+
+
 

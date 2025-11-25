@@ -1,4 +1,5 @@
 import 'package:go_router/go_router.dart';
+import 'package:flutter/foundation.dart';
 import '../screens/splash_screen.dart';
 import '../screens/onboarding_screen.dart';
 import '../screens/auth_screen.dart';
@@ -9,6 +10,7 @@ import '../screens/product_details_screen.dart';
 import '../screens/seller_dashboard_screen.dart';
 import '../screens/notifications_screen.dart';
 import '../screens/product_creation_screen.dart';
+import '../models/product_model.dart';
 import '../services/storage_service.dart';
 
 /// Application router configuration
@@ -25,17 +27,22 @@ class AppRouter {
       }
 
       // Role selection and profile setup - accessible after OTP verification
-      // Allow these routes without role checks (user might be selecting role)
+      // Allow these routes if user has phone/role saved (even if tokens are temporarily cleared)
       if (location == '/role-selection' || location == '/profile-setup') {
-        // Only check if user is logged in, don't check role
-        if (!isLoggedIn) {
+        // Check if user has phone or role saved (indicates they've logged in before)
+        final phone = await StorageService.getUserPhone();
+        final role = await StorageService.getUserRole();
+        if (phone == null && !isLoggedIn) {
           return '/auth';
         }
         return null; // Allow navigation to role-selection and profile-setup
       }
 
-      // Protected routes - require authentication
-      if (!isLoggedIn) {
+      // Protected routes - require authentication OR saved user data
+      // This allows navigation after profile setup even if tokens are temporarily cleared
+      final savedPhone = await StorageService.getUserPhone();
+      final savedRole = await StorageService.getUserRole();
+      if (!isLoggedIn && savedPhone == null && savedRole == null) {
         return '/auth';
       }
 
@@ -63,7 +70,18 @@ class AppRouter {
 
       // Buyer routes
       if (location.startsWith('/home') || location.startsWith('/product-details')) {
+        // Allow navigation if role is buyer OR if role is null but we're coming from profile setup
+        // This handles the case where role was just updated but router checks before storage syncs
         if (role != 'buyer') {
+          // If role is null, check if we have phone (user just completed profile setup)
+          if (role == null && savedPhone != null) {
+            // User just completed profile setup - allow navigation temporarily
+            // The role will be set correctly on next navigation
+            if (kDebugMode) {
+              print('⚠️ Router: Role is null but phone exists - allowing buyer navigation');
+            }
+            return null; // Allow navigation
+          }
           // Redirect to appropriate dashboard
           return role == 'seller' ? '/seller-dashboard' : '/role-selection';
         }
@@ -136,7 +154,10 @@ class AppRouter {
       GoRoute(
         path: '/product-create',
         name: 'product-create',
-        builder: (context, state) => const ProductCreationScreen(),
+        builder: (context, state) {
+          final product = state.extra as ProductModel?;
+          return ProductCreationScreen(productToEdit: product);
+        },
       ),
       GoRoute(
         path: '/notifications',

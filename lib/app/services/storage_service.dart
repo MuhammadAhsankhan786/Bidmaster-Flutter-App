@@ -1,7 +1,11 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
+import '../utils/jwt_utils.dart';
 
 class StorageService {
-  static const String _keyToken = 'auth_token';
+  static const String _keyToken = 'auth_token'; // Legacy - kept for backward compatibility
+  static const String _keyAccessToken = 'access_token';
+  static const String _keyRefreshToken = 'refresh_token';
   static const String _keyUserId = 'user_id';
   static const String _keyUserRole = 'user_role';
   static const String _keyUserPhone = 'user_phone';
@@ -14,17 +18,88 @@ class StorageService {
 
   // Token management
   static Future<void> saveToken(String token) async {
-    final prefs = await _prefs;
-    await prefs.setString(_keyToken, token);
+    // Legacy method - saves as access token
+    await saveAccessToken(token);
   }
 
   static Future<String?> getToken() async {
-    final prefs = await _prefs;
-    return prefs.getString(_keyToken);
+    // Legacy method - returns access token
+    return await getAccessToken();
   }
 
   static Future<void> clearToken() async {
+    await clearAllTokens();
+  }
+
+  // Access token management
+  static Future<void> saveAccessToken(String token) async {
     final prefs = await _prefs;
+    await prefs.setString(_keyAccessToken, token);
+    await prefs.setString(_keyToken, token); // Keep for backward compatibility
+  }
+
+  static Future<String?> getAccessToken() async {
+    final prefs = await _prefs;
+    final token = prefs.getString(_keyAccessToken) ?? prefs.getString(_keyToken); // Fallback to legacy
+    
+    // 🔍 DEEP TRACE: Log token retrieval
+    if (kDebugMode && token != null) {
+      print('🔍 [DEEP TRACE] StorageService.getAccessToken() called');
+      print('   Token length: ${token.length}');
+      print('   Token preview: ${token.substring(0, token.length > 50 ? 50 : token.length)}...');
+      
+      // Try to decode and log role
+      try {
+        final role = JwtUtils.getRoleFromToken(token);
+        final userId = JwtUtils.getUserIdFromToken(token);
+        print('   🔍 Decoded token role: $role');
+        print('   🔍 Decoded token userId: $userId');
+        
+        // Compare with stored role
+        final storedRole = await getUserRole();
+        print('   🔍 Stored role in SharedPreferences: $storedRole');
+        if (role != null && storedRole != null && role != storedRole) {
+          print('   ⚠️⚠️⚠️ ROLE MISMATCH DETECTED! ⚠️⚠️⚠️');
+          print('   ⚠️ Token role: $role');
+          print('   ⚠️ Stored role: $storedRole');
+          print('   ⚠️ STACK TRACE:');
+          print(StackTrace.current);
+        }
+      } catch (e) {
+        print('   ⚠️ Could not decode token: $e');
+      }
+    } else if (kDebugMode) {
+      print('🔍 [DEEP TRACE] StorageService.getAccessToken() - NO TOKEN FOUND');
+    }
+    
+    return token;
+  }
+  
+
+  // Refresh token management
+  static Future<void> saveRefreshToken(String token) async {
+    final prefs = await _prefs;
+    await prefs.setString(_keyRefreshToken, token);
+  }
+
+  static Future<String?> getRefreshToken() async {
+    final prefs = await _prefs;
+    return prefs.getString(_keyRefreshToken);
+  }
+
+  // Save both tokens
+  static Future<void> saveTokens({required String accessToken, required String refreshToken}) async {
+    final prefs = await _prefs;
+    await prefs.setString(_keyAccessToken, accessToken);
+    await prefs.setString(_keyRefreshToken, refreshToken);
+    await prefs.setString(_keyToken, accessToken); // Keep for backward compatibility
+  }
+
+  // Clear all tokens
+  static Future<void> clearAllTokens() async {
+    final prefs = await _prefs;
+    await prefs.remove(_keyAccessToken);
+    await prefs.remove(_keyRefreshToken);
     await prefs.remove(_keyToken);
   }
 
@@ -76,7 +151,7 @@ class StorageService {
   // Clear all user data
   static Future<void> clearAll() async {
     final prefs = await _prefs;
-    await prefs.remove(_keyToken);
+    await clearAllTokens();
     await prefs.remove(_keyUserId);
     await prefs.remove(_keyUserRole);
     await prefs.remove(_keyUserPhone);

@@ -318,6 +318,63 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                                       context.go('/product-details/${product.id}');
                                     }
                                   : null,
+                              onEdit: () async {
+                                // Navigate to edit screen (reuse create screen with product data)
+                                final result = await context.push(
+                                  '/product-create',
+                                  extra: product, // Pass product for editing
+                                );
+                                if (result == true) {
+                                  _loadProducts();
+                                }
+                              },
+                              onDelete: () async {
+                                // Show confirmation dialog
+                                final confirmed = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('Delete Product'),
+                                    content: Text('Are you sure you want to delete "${product.title}"? This action cannot be undone.'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context, false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context, true),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: AppColors.red600,
+                                        ),
+                                        child: const Text('Delete'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                
+                                if (confirmed == true) {
+                                  try {
+                                    await apiService.deleteProduct(product.id);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Product deleted successfully'),
+                                          backgroundColor: AppColors.green600,
+                                        ),
+                                      );
+                                      _loadProducts();
+                                    }
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Failed to delete product: ${e.toString()}'),
+                                          backgroundColor: AppColors.red600,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                }
+                              },
                             );
                           },
                         ),
@@ -357,6 +414,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                   ],
                 ),
               ),
+            ),
             ),
           ],
         ),
@@ -438,11 +496,15 @@ class _ListingCard extends StatelessWidget {
   final ProductModel product;
   final String imageUrl;
   final VoidCallback? onTap;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   const _ListingCard({
     required this.product,
     required this.imageUrl,
     this.onTap,
+    this.onEdit,
+    this.onDelete,
   });
 
   @override
@@ -595,6 +657,42 @@ class _ListingCard extends StatelessWidget {
                                 ? AppColors.textSecondaryDark
                                 : AppColors.textSecondaryLight,
                           ),
+                    ),
+                  // Edit/Delete buttons (only for seller's own products)
+                  if (onEdit != null || onDelete != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          if (onEdit != null)
+                            IconButton(
+                              icon: const Icon(Icons.edit, size: 18),
+                              color: AppColors.blue600,
+                              onPressed: () {
+                                // Stop tap propagation
+                                if (onTap != null) {
+                                  // Don't navigate to details
+                                }
+                                onEdit?.call();
+                              },
+                              tooltip: 'Edit',
+                            ),
+                          if (onDelete != null)
+                            IconButton(
+                              icon: const Icon(Icons.delete, size: 18),
+                              color: AppColors.red600,
+                              onPressed: () {
+                                // Stop tap propagation
+                                if (onTap != null) {
+                                  // Don't navigate to details
+                                }
+                                onDelete?.call();
+                              },
+                              tooltip: 'Delete',
+                            ),
+                        ],
+                      ),
                     ),
                 ],
               ),
