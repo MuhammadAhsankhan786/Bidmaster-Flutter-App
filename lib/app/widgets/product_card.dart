@@ -193,7 +193,7 @@ class ProductCard extends StatelessWidget {
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                '${50 + (id.hashCode % 150)}',
+                                '0', // View count will be loaded from API
                                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                       color: isDark
                                           ? AppColors.textSecondaryDark

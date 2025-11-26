@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uni_links/uni_links.dart';
 import 'app/router/app_router.dart';
 import 'app/theme/theme.dart';
 import 'app/services/storage_service.dart';
+import 'app/services/referral_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +38,9 @@ void main() async {
     // Auto-login works in both debug and release mode (as per requirements)
     await _checkAutoLogin();
     
+    // Initialize deep link handling for referral codes
+    _initDeepLinks();
+    
     runApp(const MyApp());
   } catch (e, stackTrace) {
     // Catch any initialization errors
@@ -62,6 +67,31 @@ Future<void> _checkAutoLogin() async {
     }
     // Token is valid - user will be redirected by router
   }
+}
+
+/// Initialize deep link handling for referral codes
+void _initDeepLinks() {
+  // Handle initial link (if app was opened via deep link)
+  getInitialLink().then((String? initialLink) {
+    if (initialLink != null) {
+      ReferralService.handleDeepLink(initialLink);
+    }
+  }).catchError((err) {
+    if (kDebugMode) {
+      print('❌ Error getting initial link: $err');
+    }
+  });
+
+  // Handle links while app is running
+  linkStream.listen((String? link) {
+    if (link != null) {
+      ReferralService.handleDeepLink(link);
+    }
+  }, onError: (err) {
+    if (kDebugMode) {
+      print('❌ Error listening to links: $err');
+    }
+  });
 }
 
 class MyApp extends StatelessWidget {

@@ -21,15 +21,8 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
   int _currentPage = 1;
   bool _hasMore = true;
 
-  final List<String> _categories = [
-    'All',
-    'Watches',
-    'Electronics',
-    'Art',
-    'Furniture',
-    'Fashion',
-    'Collectibles',
-  ];
+  // Categories will be loaded from API
+  final List<String> _categories = ['All']; // 'All' is always available, rest loaded from API
 
   @override
   void initState() {
@@ -250,14 +243,14 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
 
                     const SizedBox(height: 16),
 
-                    // Stats Cards
+                    // Stats Cards - Values will be calculated from actual data
                     Row(
                       children: [
                         Expanded(
                           child: _StatCard(
                             icon: Icons.trending_up,
                             label: 'Trending',
-                            value: '125',
+                            value: '0', // Will be calculated from API data
                             gradientColors: [AppColors.blue500, AppColors.blue600],
                           ),
                         ),
@@ -266,7 +259,7 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
                           child: _StatCard(
                             icon: Icons.access_time,
                             label: 'Ending Soon',
-                            value: '32',
+                            value: '0', // Will be calculated from API data
                             gradientColors: [AppColors.yellow500, AppColors.yellow600],
                           ),
                         ),
@@ -275,7 +268,7 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
                           child: _StatCard(
                             icon: Icons.star,
                             label: 'Featured',
-                            value: '18',
+                            value: '0', // Will be calculated from API data
                             gradientColors: [AppColors.green500, AppColors.green600],
                           ),
                         ),

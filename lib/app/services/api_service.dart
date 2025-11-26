@@ -9,6 +9,7 @@ import '../models/bid_model.dart';
 import '../models/notification_model.dart';
 import 'storage_service.dart';
 import 'token_refresh_interceptor.dart';
+import 'referral_service.dart';
 import '../utils/jwt_utils.dart';
 
 class ApiService {
@@ -358,10 +359,31 @@ class ApiService {
         }
       }
       
+      // Get pending referral code if exists
+      final referralCode = await _getPendingReferralCode();
+      
+      final requestData = {
+        'phone': normalizedPhone,
+        'otp': otp,
+      };
+      
+      // Add referral code if available
+      if (referralCode != null && referralCode.isNotEmpty) {
+        requestData['referral_code'] = referralCode;
+        if (kDebugMode) {
+          print('📎 Including referral code in verify-otp request: $referralCode');
+        }
+      }
+      
       final response = await _dio.post(
         '/auth/verify-otp',
-        data: {'phone': normalizedPhone, 'otp': otp},
+        data: requestData,
       );
+      
+      // Clear referral code after successful verification
+      if (response.data['success'] == true) {
+        await _clearPendingReferralCode();
+      }
       
       if (kDebugMode) {
         print('✅ OTP verified successfully via Twilio Verify');

@@ -10,6 +10,7 @@ import '../screens/product_details_screen.dart';
 import '../screens/seller_dashboard_screen.dart';
 import '../screens/notifications_screen.dart';
 import '../screens/product_creation_screen.dart';
+import '../screens/invite_and_earn_screen.dart';
 import '../models/product_model.dart';
 import '../services/storage_service.dart';
 
@@ -163,6 +164,11 @@ class AppRouter {
         path: '/notifications',
         name: 'notifications',
         builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/invite-and-earn',
+        name: 'invite-and-earn',
+        builder: (context, state) => const InviteAndEarnScreen(),
       ),
     ],
   );

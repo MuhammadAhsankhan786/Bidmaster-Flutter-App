@@ -11,6 +11,8 @@ class StorageService {
   static const String _keyUserPhone = 'user_phone';
   static const String _keyUserName = 'user_name';
   static const String _keyUserEmail = 'user_email';
+  static const String _keyReferralCode = 'user_referral_code';
+  static const String _keyRewardBalance = 'user_reward_balance';
 
   static Future<SharedPreferences> get _prefs async {
     return await SharedPreferences.getInstance();
@@ -149,6 +151,27 @@ class StorageService {
   }
 
   // Clear all user data
+  // Referral code and reward balance
+  static Future<void> saveReferralCode(String referralCode) async {
+    final prefs = await _prefs;
+    await prefs.setString(_keyReferralCode, referralCode);
+  }
+
+  static Future<String?> getReferralCode() async {
+    final prefs = await _prefs;
+    return prefs.getString(_keyReferralCode);
+  }
+
+  static Future<void> saveRewardBalance(double balance) async {
+    final prefs = await _prefs;
+    await prefs.setDouble(_keyRewardBalance, balance);
+  }
+
+  static Future<double> getRewardBalance() async {
+    final prefs = await _prefs;
+    return prefs.getDouble(_keyRewardBalance) ?? 0.0;
+  }
+
   static Future<void> clearAll() async {
     final prefs = await _prefs;
     await clearAllTokens();

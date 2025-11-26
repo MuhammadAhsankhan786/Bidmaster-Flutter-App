@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:dio/dio.dart';
 import '../theme/colors.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
@@ -306,12 +307,41 @@ class _AuthScreenState extends State<AuthScreen> {
         otp,
       );
       
+      if (kDebugMode) {
+        print('📦 Full response from verifyOTP:');
+        print('   success: ${response['success']}');
+        print('   token: ${response['token'] != null ? 'present' : 'missing'}');
+        print('   accessToken: ${response['accessToken'] != null ? 'present' : 'missing'}');
+        print('   user: ${response['user'] != null ? 'present' : 'missing'}');
+        print('   role: ${response['role']}');
+      }
+      
       setState(() {
         _isLoading = false;
       });
 
       if (mounted) {
-        if (response['success'] == true && (response['token'] != null || response['accessToken'] != null)) {
+        // Check if response has success and token
+        final hasSuccess = response['success'] == true;
+        final hasToken = response['token'] != null || response['accessToken'] != null;
+        
+        if (kDebugMode) {
+          print('🔍 Response validation:');
+          print('   success == true: $hasSuccess');
+          print('   hasToken: $hasToken');
+          print('   Will proceed: ${hasSuccess && hasToken}');
+        }
+        
+        if (hasSuccess && hasToken) {
+          // ✅ CONFIRMATION: OTP VERIFIED
+          if (kDebugMode) {
+            print('========================================');
+            print('✅ OTP VERIFICATION: SUCCESS');
+            print('✅ Response Success: YES');
+            print('✅ Token Present: YES');
+            print('========================================');
+          }
+          
           final user = response['user'];
           final role = (response['role'] ?? user?['role'] ?? 'buyer').toString().toLowerCase();
           
@@ -413,32 +443,105 @@ class _AuthScreenState extends State<AuthScreen> {
           // Wait a moment for UI to update
           await Future.delayed(const Duration(milliseconds: 500));
 
-          if (!mounted) return;
+          if (!mounted) {
+            if (kDebugMode) {
+              print('⚠️ Widget not mounted, cannot navigate');
+            }
+            return;
+          }
 
           // Always show role selection screen after login
           final userName = user?['name'] as String?;
           final userEmail = user?['email'] as String?;
           
-          if (userName == null || userEmail == null) {
-            // Profile incomplete - redirect to profile setup first
-            if (kDebugMode) {
-              print('🧭 Redirecting to ProfileSetup (incomplete profile)');
+          if (kDebugMode) {
+            print('🧭 Navigation check:');
+            print('   userName: ${userName ?? 'null'}');
+            print('   userEmail: ${userEmail ?? 'null'}');
+            print('   role: $role');
+          }
+          
+          try {
+            if (userName == null || userEmail == null) {
+              // Profile incomplete - redirect to profile setup first
+              if (kDebugMode) {
+                print('🧭 Navigating to ProfileSetup (incomplete profile)');
+              }
+              if (mounted) {
+                context.go('/profile-setup', extra: {'role': role});
+                // ✅ CONFIRMATION: NAVIGATION ATTEMPTED
+                if (kDebugMode) {
+                  print('========================================');
+                  print('✅ NAVIGATION: ATTEMPTED');
+                  print('✅ Route: /profile-setup');
+                  print('✅ Status: SUCCESS');
+                  print('========================================');
+                }
+              }
+            } else {
+              // Profile complete - always show role selection to let user choose buyer/seller
+              if (kDebugMode) {
+                print('🧭 Navigating to RoleSelection (user can choose buyer or seller)');
+              }
+              if (mounted) {
+                context.go('/role-selection');
+                // ✅ CONFIRMATION: NAVIGATION ATTEMPTED
+                if (kDebugMode) {
+                  print('========================================');
+                  print('✅ NAVIGATION: ATTEMPTED');
+                  print('✅ Route: /role-selection');
+                  print('✅ Status: SUCCESS');
+                  print('========================================');
+                }
+              }
             }
-            context.go('/profile-setup', extra: {'role': role});
-          } else {
-            // Profile complete - always show role selection to let user choose buyer/seller
+            
             if (kDebugMode) {
-              print('🧭 Redirecting to RoleSelection (user can choose buyer or seller)');
+              print('✅ Navigation completed');
             }
-            context.go('/role-selection');
+          } catch (e) {
+            // ❌ CONFIRMATION: NAVIGATION FAILED
+            if (kDebugMode) {
+              print('========================================');
+              print('❌ NAVIGATION: FAILED');
+              print('❌ Error: $e');
+              print('========================================');
+            }
+            // Fallback: try to navigate to home
+            if (mounted) {
+              try {
+                context.go('/role-selection');
+                if (kDebugMode) {
+                  print('✅ Fallback navigation attempted');
+                }
+              } catch (e2) {
+                if (kDebugMode) {
+                  print('❌ Fallback navigation also failed: $e2');
+                }
+              }
+            }
           }
         } else {
+          // ❌ CONFIRMATION: OTP VERIFICATION FAILED
           if (kDebugMode) {
-            print('⚠️ OTP verification failed');
-            print('   Response success: ${response['success']}');
-            print('   Token present: ${response['token'] != null || response['accessToken'] != null}');
+            print('========================================');
+            print('❌ OTP VERIFICATION: FAILED');
+            print('❌ Response success: ${response['success']}');
+            print('❌ Token present: ${response['token'] != null || response['accessToken'] != null}');
+            print('❌ NAVIGATION: NOT ATTEMPTED (verification failed)');
+            print('========================================');
+            print('   Full response: $response');
           }
-          _showError('Verification failed', response['message'] ?? 'Invalid OTP. Please try again.');
+          
+          final errorMessage = response['message'] ?? 
+                               response['error'] ?? 
+                               'Invalid OTP. Please try again.';
+          
+          if (kDebugMode) {
+            print('   Error message: $errorMessage');
+          }
+          
+          _showError('Verification failed', errorMessage);
         }
       }
     } catch (e) {
@@ -447,13 +550,44 @@ class _AuthScreenState extends State<AuthScreen> {
         _otpAttempts++;
       });
 
+      if (kDebugMode) {
+        print('========================================');
+        print('❌ OTP VERIFICATION: EXCEPTION');
+        print('❌ Error: $e');
+        if (e is DioException && e.response != null) {
+          print('   Status Code: ${e.response?.statusCode}');
+          print('   Response Data: ${e.response?.data}');
+          print('   Error Message: ${e.response?.data?['message'] ?? e.response?.data?['error']}');
+        }
+        print('========================================');
+      }
+
       if (_otpAttempts >= _maxOTPAttempts) {
         _showError('Too many failed attempts', 'Please request a new OTP');
       } else {
         String errorMsg = 'Invalid OTP. Please check and try again.';
         
-        // Handle specific Twilio Verify errors
-        if (e.toString().contains('404') || e.toString().contains('not registered')) {
+        // Extract error message from backend response
+        if (e is DioException && e.response != null) {
+          final responseData = e.response?.data;
+          if (responseData is Map) {
+            errorMsg = responseData['message'] ?? 
+                      responseData['error'] ?? 
+                      'Server error. Please try again.';
+            
+            // If 500 error, show more details in debug mode
+            if (e.response?.statusCode == 500) {
+              if (kDebugMode) {
+                errorMsg += '\n\nDebug: ${responseData['message'] ?? 'Internal server error'}';
+              }
+            }
+          }
+        }
+        
+        // Handle specific error codes
+        if (e.toString().contains('500') || e.toString().contains('Internal Server Error')) {
+          errorMsg = 'Server error occurred. Please try again or contact support.';
+        } else if (e.toString().contains('404') || e.toString().contains('not registered')) {
           errorMsg = 'Phone number not registered. Please contact administrator.';
         } else if (e.toString().contains('Invalid OTP') || e.toString().contains('expired')) {
           errorMsg = 'Invalid or expired OTP. Please request a new OTP.';
