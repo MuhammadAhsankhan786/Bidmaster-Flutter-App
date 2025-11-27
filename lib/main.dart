@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uni_links/uni_links.dart';
+import 'package:app_links/app_links.dart';
 import 'app/router/app_router.dart';
 import 'app/theme/theme.dart';
 import 'app/services/storage_service.dart';
@@ -71,10 +71,12 @@ Future<void> _checkAutoLogin() async {
 
 /// Initialize deep link handling for referral codes
 void _initDeepLinks() {
+  final appLinks = AppLinks();
+  
   // Handle initial link (if app was opened via deep link)
-  getInitialLink().then((String? initialLink) {
-    if (initialLink != null) {
-      ReferralService.handleDeepLink(initialLink);
+  appLinks.getInitialLink().then((Uri? uri) {
+    if (uri != null) {
+      ReferralService.handleDeepLink(uri.toString());
     }
   }).catchError((err) {
     if (kDebugMode) {
@@ -83,9 +85,9 @@ void _initDeepLinks() {
   });
 
   // Handle links while app is running
-  linkStream.listen((String? link) {
-    if (link != null) {
-      ReferralService.handleDeepLink(link);
+  appLinks.uriLinkStream.listen((Uri uri) {
+    if (uri != null) {
+      ReferralService.handleDeepLink(uri.toString());
     }
   }, onError: (err) {
     if (kDebugMode) {

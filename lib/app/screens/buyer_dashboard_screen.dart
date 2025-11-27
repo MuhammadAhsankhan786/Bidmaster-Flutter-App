@@ -21,14 +21,38 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
   int _currentPage = 1;
   bool _hasMore = true;
 
-  // Categories will be loaded from API
-  final List<String> _categories = ['All']; // 'All' is always available, rest loaded from API
+  // Categories loaded from API
+  List<String> _categories = ['All']; // 'All' is always available, rest loaded from API
+  bool _categoriesLoaded = false; // Prevent multiple loads
 
   @override
   void initState() {
     super.initState();
+    _loadCategories();
     _loadProducts();
     _searchController.addListener(_onSearchChanged);
+  }
+
+  Future<void> _loadCategories() async {
+    if (_categoriesLoaded) return; // Prevent multiple loads
+    
+    try {
+      final categories = await apiService.getAllCategories();
+      // Extract unique category names and remove duplicates
+      final categoryNames = categories
+          .map((cat) => cat['name'] as String)
+          .where((name) => name != null && name.isNotEmpty)
+          .toSet() // Remove duplicates using Set
+          .toList();
+      
+      setState(() {
+        _categories = ['All', ...categoryNames];
+        _categoriesLoaded = true;
+      });
+    } catch (e) {
+      print('Error loading categories: $e');
+      // Keep 'All' as default
+    }
   }
 
   void _onSearchChanged() {
@@ -209,12 +233,15 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
                         itemCount: _categories.length,
+                        key: const ValueKey('category_filter_list'),
                         itemBuilder: (context, index) {
                           final category = _categories[index];
                           final isSelected = _selectedCategory == category;
                           return Padding(
+                            key: ValueKey('category_${index}_$category'),
                             padding: const EdgeInsets.only(right: 8),
                             child: FilterChip(
+                              key: ValueKey('filter_chip_$category'),
                               label: Text(category),
                               selected: isSelected,
                               onSelected: (selected) {

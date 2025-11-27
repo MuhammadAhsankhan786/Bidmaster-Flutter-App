@@ -38,13 +38,25 @@ class StorageService {
     final prefs = await _prefs;
     await prefs.setString(_keyAccessToken, token);
     await prefs.setString(_keyToken, token); // Keep for backward compatibility
+    
+    if (kDebugMode) {
+      print('✅ [TOKEN STORAGE] Access token saved successfully');
+      print('   Token length: ${token.length}');
+      // Verify it was saved
+      final saved = await prefs.getString(_keyAccessToken);
+      if (saved != null && saved == token) {
+        print('   ✅ Token verified in storage');
+      } else {
+        print('   ⚠️ Warning: Token may not have been saved correctly');
+      }
+    }
   }
 
   static Future<String?> getAccessToken() async {
     final prefs = await _prefs;
     final token = prefs.getString(_keyAccessToken) ?? prefs.getString(_keyToken); // Fallback to legacy
     
-    // 🔍 DEEP TRACE: Log token retrieval
+    // 🔍 DEEP TRACE: Log token retrieval (only when token exists or for debugging)
     if (kDebugMode && token != null) {
       print('🔍 [DEEP TRACE] StorageService.getAccessToken() called');
       print('   Token length: ${token.length}');
@@ -70,9 +82,9 @@ class StorageService {
       } catch (e) {
         print('   ⚠️ Could not decode token: $e');
       }
-    } else if (kDebugMode) {
-      print('🔍 [DEEP TRACE] StorageService.getAccessToken() - NO TOKEN FOUND');
     }
+    // Removed "NO TOKEN FOUND" log - this is normal for public endpoints like send-otp
+    // No need to log when user is not logged in (expected behavior)
     
     return token;
   }
@@ -95,6 +107,21 @@ class StorageService {
     await prefs.setString(_keyAccessToken, accessToken);
     await prefs.setString(_keyRefreshToken, refreshToken);
     await prefs.setString(_keyToken, accessToken); // Keep for backward compatibility
+    
+    if (kDebugMode) {
+      print('✅ [TOKEN STORAGE] Both tokens saved successfully');
+      print('   Access token length: ${accessToken.length}');
+      print('   Refresh token length: ${refreshToken.length}');
+      // Verify tokens were saved
+      final savedAccess = await prefs.getString(_keyAccessToken);
+      final savedRefresh = await prefs.getString(_keyRefreshToken);
+      if (savedAccess != null && savedAccess == accessToken && 
+          savedRefresh != null && savedRefresh == refreshToken) {
+        print('   ✅ Both tokens verified in storage');
+      } else {
+        print('   ⚠️ Warning: Tokens may not have been saved correctly');
+      }
+    }
   }
 
   // Clear all tokens

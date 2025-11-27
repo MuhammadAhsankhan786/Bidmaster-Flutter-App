@@ -30,6 +30,11 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
   File? _selectedImage;
   Uint8List? _selectedImageBytes;
   String? _existingImageUrl; // Store existing image URL for edit mode
+  
+  // Category state
+  List<Map<String, dynamic>> _categories = [];
+  int? _selectedCategoryId;
+  bool _isLoadingCategories = false;
 
   @override
   void initState() {
@@ -40,10 +45,41 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
       _titleController.text = product.title;
       _descriptionController.text = product.description ?? '';
       _priceController.text = product.startingPrice.toString();
+      _selectedCategoryId = product.categoryId;
       
       // Load existing image URL
       if (product.imageUrls.isNotEmpty) {
         _existingImageUrl = product.imageUrls.first;
+      }
+    }
+    // Load categories on init
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    setState(() {
+      _isLoadingCategories = true;
+    });
+
+    try {
+      final categories = await apiService.getAllCategories();
+      setState(() {
+        _categories = categories;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading categories: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingCategories = false;
+        });
       }
     }
   }
@@ -137,6 +173,19 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
       return;
     }
 
+    // Validate category is selected
+    if (_selectedCategoryId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Please select a category'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+      return;
+    }
+
     // Check user role before attempting to create/update product
     final userRole = await StorageService.getUserRole();
     if (userRole != 'seller') {
@@ -201,6 +250,7 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
               : _descriptionController.text.trim(),
           imageUrl: imageUrl, // Send null if removed, existing URL if kept, new URL if uploaded
           startingPrice: price,
+          categoryId: _selectedCategoryId,
         );
 
         if (mounted) {
@@ -222,6 +272,7 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
           imageUrl: imageUrl,
           startingPrice: price,
           duration: _duration,
+          categoryId: _selectedCategoryId,
         );
 
         if (mounted) {
@@ -347,6 +398,66 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
                     }
                     return null;
                   },
+                ),
+
+                const SizedBox(height: 16),
+
+                // Category Dropdown
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isDark ? AppColors.slate700 : AppColors.slate200,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Category *',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      if (_isLoadingCategories)
+                        const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(16.0),
+                            child: CircularProgressIndicator(),
+                          ),
+                        )
+                      else
+                        DropdownButtonFormField<int>(
+                          value: _selectedCategoryId,
+                          decoration: InputDecoration(
+                            hintText: 'Select a category',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: isDark ? AppColors.slate900 : AppColors.slate50,
+                          ),
+                          items: _categories.map((category) {
+                            return DropdownMenuItem<int>(
+                              value: category['id'] as int,
+                              child: Text(category['name'] as String),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedCategoryId = value;
+                            });
+                          },
+                          validator: (value) {
+                            if (value == null) {
+                              return 'Category is required';
+                            }
+                            return null;
+                          },
+                        ),
+                    ],
+                  ),
                 ),
 
                 const SizedBox(height: 16),

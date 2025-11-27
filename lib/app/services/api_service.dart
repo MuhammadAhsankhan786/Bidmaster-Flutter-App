@@ -14,37 +14,46 @@ import '../utils/jwt_utils.dart';
 
 class ApiService {
   // Dynamic base URL based on debug/release mode
-  // Debug: localhost (for local development)
+  // Debug: Can use localhost (desktop only) or local network IP (web/mobile)
   // Release: Production server URL or local network IP
   static String get baseUrl {
-    if (kDebugMode) {
-      // Debug mode: use localhost
-      return 'http://localhost:5000/api';
-    } else {
-      // Release mode: Use production server URL
-      // CRITICAL: Must be set via --dart-define=API_BASE_URL=your_url
-      const String productionUrl = String.fromEnvironment(
-        'API_BASE_URL',
-        defaultValue: '',
-      );
-      
-      // In release mode, API URL must be explicitly set
-      // If not set, use a placeholder that will cause clear error on first API call
-      if (productionUrl.isEmpty) {
-        // Return a placeholder that will fail with clear error message
-        // This allows app to start but will fail on first API call with helpful message
-        return 'API_BASE_URL_NOT_CONFIGURED';
-      }
-      
+    // Check if API_BASE_URL is explicitly set (works in both debug and release)
+    const String envUrl = String.fromEnvironment(
+      'API_BASE_URL',
+      defaultValue: '',
+    );
+    
+    if (envUrl.isNotEmpty) {
       // Validate URL format
-      if (!productionUrl.startsWith('http://') && !productionUrl.startsWith('https://')) {
+      if (!envUrl.startsWith('http://') && !envUrl.startsWith('https://')) {
         throw Exception(
           'Invalid API_BASE_URL format. Must start with http:// or https://. '
-          'Current value: $productionUrl'
+          'Current value: $envUrl'
         );
       }
-      
-      return productionUrl;
+      return envUrl;
+    }
+    
+    if (kDebugMode) {
+      // Debug mode: use localhost for desktop, but warn for web/mobile
+      if (kIsWeb) {
+        // Web doesn't support localhost - need actual IP
+        print('⚠️ WARNING: Running on web. localhost will not work!');
+        print('   Please set API_BASE_URL using: --dart-define=API_BASE_URL=http://YOUR_IP:5000/api');
+        print('   Example: flutter run -d chrome --dart-define=API_BASE_URL=http://192.168.1.100:5000/api');
+        // Still return localhost but it will fail with clear error
+        return 'http://localhost:5000/api';
+      } else {
+        // Mobile: localhost won't work, need actual IP
+        print('⚠️ WARNING: Running on mobile. localhost will not work!');
+        print('   Please set API_BASE_URL using: --dart-define=API_BASE_URL=http://YOUR_IP:5000/api');
+        print('   Example: flutter run --dart-define=API_BASE_URL=http://192.168.1.100:5000/api');
+        // Still return localhost but it will fail with clear error
+        return 'http://localhost:5000/api';
+      }
+    } else {
+      // Release mode: API URL must be explicitly set
+      return 'API_BASE_URL_NOT_CONFIGURED';
     }
   }
   
@@ -399,6 +408,12 @@ class ApiService {
       final refreshToken = response.data['refreshToken'];
       
       if (accessToken != null) {
+        if (kDebugMode) {
+          print('💾 [TOKEN SAVE] Saving tokens after OTP verification...');
+          print('   Access token present: ✅');
+          print('   Refresh token present: ${refreshToken != null ? "✅" : "❌"}');
+        }
+        
         if (refreshToken != null) {
           await StorageService.saveTokens(
             accessToken: accessToken as String,
@@ -414,6 +429,16 @@ class ApiService {
           }
         }
         
+        // Verify token was saved
+        final savedToken = await StorageService.getAccessToken();
+        if (kDebugMode) {
+          if (savedToken != null && savedToken == accessToken) {
+            print('✅ [TOKEN VERIFICATION] Token successfully retrieved from storage');
+          } else {
+            print('⚠️ [TOKEN VERIFICATION] Token retrieval failed or mismatch');
+          }
+        }
+        
         // Save user data
         if (response.data['user'] != null) {
           final user = response.data['user'];
@@ -426,7 +451,14 @@ class ApiService {
           );
           if (kDebugMode) {
             print('✅ User data saved to storage');
+            print('   User ID: ${user['id']}');
+            print('   Role: $role');
+            print('   Phone: $normalizedPhone');
           }
+        }
+      } else {
+        if (kDebugMode) {
+          print('⚠️ [TOKEN SAVE] No access token in response - cannot save');
         }
       }
       
@@ -1336,6 +1368,129 @@ class ApiService {
     }
   }
 
+  // ==================== REFERRAL METHODS ====================
+
+  /// GET /api/referral/my-code
+  /// Get user's referral code and reward balance
+  Future<Map<String, dynamic>> getReferralCode() async {
+    try {
+      final token = await StorageService.getToken();
+      if (token == null) {
+        throw Exception('Not authenticated');
+      }
+
+      final response = await _dio.get(
+        '/referral/my-code',
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+
+      if (kDebugMode) {
+        print('✅ Referral code fetched: ${response.data}');
+      }
+
+      return response.data;
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error fetching referral code: $e');
+      }
+      throw _handleError(e);
+    }
+  }
+
+  /// GET /api/referral/history
+  /// Get user's referral transaction history
+  Future<Map<String, dynamic>> getReferralHistory({
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final token = await StorageService.getToken();
+      if (token == null) {
+        throw Exception('Not authenticated');
+      }
+
+      final response = await _dio.get(
+        '/referral/history',
+        queryParameters: {
+          'page': page,
+          'limit': limit,
+        },
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+
+      if (kDebugMode) {
+        print('✅ Referral history fetched: ${response.data}');
+      }
+
+      return response.data;
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error fetching referral history: $e');
+      }
+      throw _handleError(e);
+    }
+  }
+
+  /// Get pending referral code from storage (for OTP verification)
+  Future<String?> _getPendingReferralCode() async {
+    return await ReferralService.getPendingReferralCode();
+  }
+
+  /// Clear pending referral code from storage (after successful OTP verification)
+  Future<void> _clearPendingReferralCode() async {
+    await ReferralService.clearPendingReferralCode();
+  }
+
+  // ==================== CATEGORY METHODS ====================
+
+  /// GET /api/categories
+  /// Get all active categories
+  Future<List<Map<String, dynamic>>> getAllCategories() async {
+    try {
+      final response = await _dio.get('/categories');
+
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final categoriesList = (response.data['data'] as List)
+            .map((cat) => cat as Map<String, dynamic>)
+            .toList();
+        
+        // Remove duplicates by id
+        final seenIds = <int>{};
+        final categories = categoriesList.where((cat) {
+          final id = cat['id'] as int?;
+          if (id == null) return false;
+          if (seenIds.contains(id)) return false;
+          seenIds.add(id);
+          return true;
+        }).toList();
+        
+        if (kDebugMode) {
+          print('✅ Categories fetched: ${categories.length} (${categoriesList.length - categories.length} duplicates removed)');
+        }
+        
+        return categories;
+      } else {
+        if (kDebugMode) {
+          print('⚠️ No categories in response');
+        }
+        return [];
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error fetching categories: $e');
+      }
+      throw _handleError(e);
+    }
+  }
+
   // ==================== ERROR HANDLING ====================
 
   String _handleError(dynamic error) {
@@ -1352,10 +1507,29 @@ class ApiService {
       }
       if (error.type == DioExceptionType.connectionTimeout ||
           error.type == DioExceptionType.receiveTimeout) {
-        return 'Connection timeout. Please check your internet connection.';
+        return 'Connection timeout. Please check your internet connection and ensure the server is running.';
       }
       if (error.type == DioExceptionType.connectionError) {
-        return 'Unable to connect to server. Please check your internet connection.';
+        String currentBaseUrl = ApiService.baseUrl;
+        String errorMsg = 'Unable to connect to server. ';
+        
+        if (kDebugMode) {
+          if (currentBaseUrl.contains('localhost')) {
+            errorMsg += '\n\n⚠️ localhost does not work on web/mobile devices!\n';
+            errorMsg += 'Please run with: --dart-define=API_BASE_URL=http://YOUR_LOCAL_IP:5000/api\n';
+            errorMsg += 'To find your IP: Windows (ipconfig) or Mac/Linux (ifconfig)\n';
+            errorMsg += 'Example: flutter run --dart-define=API_BASE_URL=http://192.168.1.100:5000/api';
+          } else {
+            errorMsg += 'Please check:\n';
+            errorMsg += '1. Server is running at: $currentBaseUrl\n';
+            errorMsg += '2. Your internet connection\n';
+            errorMsg += '3. Firewall settings';
+          }
+        } else {
+          errorMsg += 'Please check your internet connection and ensure the server is accessible.';
+        }
+        
+        return errorMsg;
       }
       return error.message ?? 'An error occurred';
     }
