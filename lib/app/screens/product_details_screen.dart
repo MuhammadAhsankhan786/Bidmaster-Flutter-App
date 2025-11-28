@@ -98,7 +98,15 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               child: Row(
                 children: [
                   IconButton(
-                    onPressed: () => context.pop(),
+                    onPressed: () {
+                      // Check if we can pop, otherwise navigate to home
+                      if (context.canPop()) {
+                        context.pop();
+                      } else {
+                        // If nothing to pop, navigate to home dashboard
+                        context.go('/home');
+                      }
+                    },
                     icon: const Icon(Icons.arrow_back),
                     style: IconButton.styleFrom(
                       backgroundColor:

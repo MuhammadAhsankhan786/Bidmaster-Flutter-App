@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
 import '../widgets/product_card.dart';
@@ -24,6 +25,8 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
   // Categories loaded from API
   List<String> _categories = ['All']; // 'All' is always available, rest loaded from API
   bool _categoriesLoaded = false; // Prevent multiple loads
+  bool _isLoadingMore = false; // Prevent multiple load-more calls
+  bool _loadMoreScheduled = false; // Prevent scheduling multiple load-more calls during build
 
   @override
   void initState() {
@@ -130,6 +133,91 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
     }
   }
 
+  void _showSettingsBottomSheet(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.slate600 : AppColors.slate300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // Settings Title
+            Row(
+              children: [
+                Icon(
+                  Icons.settings,
+                  color: AppColors.blue600,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Settings',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            // Settings Options
+            ListTile(
+              leading: const Icon(Icons.person, color: AppColors.blue600),
+              title: const Text('Profile'),
+              subtitle: const Text('View and edit your profile'),
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/profile');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.swap_horiz, color: AppColors.warning),
+              title: const Text('Switch Role'),
+              subtitle: const Text('Change between Buyer and Seller'),
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/profile?scrollToSettings=true');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.account_balance_wallet, color: AppColors.green600),
+              title: const Text('Wallet'),
+              subtitle: const Text('View your wallet and earnings'),
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/wallet');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.notifications, color: AppColors.yellow600),
+              title: const Text('Notifications'),
+              subtitle: const Text('Manage your notifications'),
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/notifications');
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -175,14 +263,47 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
                           ),
                         ],
                       ),
-                      IconButton(
-                        onPressed: () {},
-                        icon: const Icon(Icons.tune),
-                        style: IconButton.styleFrom(
-                          backgroundColor:
-                              isDark ? AppColors.slate800 : AppColors.slate100,
-                          shape: const CircleBorder(),
-                        ),
+                      Row(
+                        children: [
+                          IconButton(
+                            onPressed: () {
+                              context.push('/profile');
+                            },
+                            icon: const Icon(Icons.person),
+                            tooltip: 'Profile',
+                            style: IconButton.styleFrom(
+                              backgroundColor:
+                                  isDark ? AppColors.slate800 : AppColors.slate100,
+                              shape: const CircleBorder(),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            onPressed: () {
+                              context.push('/buyer/bidding-history');
+                            },
+                            icon: const Icon(Icons.history),
+                            tooltip: 'Bidding History',
+                            style: IconButton.styleFrom(
+                              backgroundColor:
+                                  isDark ? AppColors.slate800 : AppColors.slate100,
+                              shape: const CircleBorder(),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            onPressed: () {
+                              _showSettingsBottomSheet(context);
+                            },
+                            icon: const Icon(Icons.settings),
+                            tooltip: 'Settings',
+                            style: IconButton.styleFrom(
+                              backgroundColor:
+                                  isDark ? AppColors.slate800 : AppColors.slate100,
+                              shape: const CircleBorder(),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -380,8 +501,35 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
                         itemBuilder: (context, index) {
                           if (index == _filteredProducts.length) {
                             // Load more indicator
-                            if (!_isLoading) {
-                              _loadProducts();
+                            if (!_isLoading && !_isLoadingMore && !_loadMoreScheduled && _hasMore) {
+                              // Mark as scheduled to prevent multiple calls during same build
+                              _loadMoreScheduled = true;
+                              
+                              // Use SchedulerBinding to ensure callback runs AFTER frame is complete
+                              // This guarantees setState won't be called during build
+                              SchedulerBinding.instance.addPostFrameCallback((_) {
+                                // Reset the flag first
+                                _loadMoreScheduled = false;
+                                
+                                if (mounted && !_isLoading && !_isLoadingMore && _hasMore) {
+                                  setState(() {
+                                    _isLoadingMore = true;
+                                  });
+                                  _loadProducts().then((_) {
+                                    if (mounted) {
+                                      setState(() {
+                                        _isLoadingMore = false;
+                                      });
+                                    }
+                                  }).catchError((_) {
+                                    if (mounted) {
+                                      setState(() {
+                                        _isLoadingMore = false;
+                                      });
+                                    }
+                                  });
+                                }
+                              });
                             }
                             return const Center(
                               child: Padding(

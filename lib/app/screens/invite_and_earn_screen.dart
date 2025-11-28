@@ -203,7 +203,14 @@ Start earning today! 💰
         title: const Text('Invite & Earn'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            // Check if we can pop, otherwise navigate to home
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/home');
+            }
+          },
         ),
       ),
       body: _isLoading

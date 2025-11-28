@@ -11,6 +11,11 @@ import '../screens/seller_dashboard_screen.dart';
 import '../screens/notifications_screen.dart';
 import '../screens/product_creation_screen.dart';
 import '../screens/invite_and_earn_screen.dart';
+import '../screens/wallet_screen.dart';
+import '../screens/buyer_bidding_history_screen.dart';
+import '../screens/seller_earnings_screen.dart';
+import '../screens/seller_winner_details_screen.dart';
+import '../screens/profile_screen.dart';
 import '../models/product_model.dart';
 import '../services/storage_service.dart';
 
@@ -103,6 +108,34 @@ class AppRouter {
         }
       }
 
+      // Wallet - accessible to both buyer and seller
+      if (location == '/wallet') {
+        if (role != 'buyer' && role != 'seller') {
+          return '/auth';
+        }
+      }
+
+      // Profile - accessible to both buyer and seller
+      if (location == '/profile') {
+        if (role != 'buyer' && role != 'seller') {
+          return '/auth';
+        }
+      }
+
+      // Buyer routes
+      if (location == '/buyer/bidding-history') {
+        if (role != 'buyer') {
+          return role == 'seller' ? '/seller-dashboard' : '/role-selection';
+        }
+      }
+
+      // Seller routes
+      if (location == '/seller/earnings' || location.startsWith('/seller/winner/')) {
+        if (role != 'seller') {
+          return role == 'buyer' ? '/home' : '/role-selection';
+        }
+      }
+
       return null; // Allow navigation
     },
     routes: [
@@ -169,6 +202,38 @@ class AppRouter {
         path: '/invite-and-earn',
         name: 'invite-and-earn',
         builder: (context, state) => const InviteAndEarnScreen(),
+      ),
+      GoRoute(
+        path: '/wallet',
+        name: 'wallet',
+        builder: (context, state) => const WalletScreen(),
+      ),
+      GoRoute(
+        path: '/profile',
+        name: 'profile',
+        builder: (context, state) {
+          // Check if scrollToSettings query parameter is present
+          final scrollToSettings = state.uri.queryParameters['scrollToSettings'] == 'true';
+          return ProfileScreen(scrollToSettings: scrollToSettings);
+        },
+      ),
+      GoRoute(
+        path: '/buyer/bidding-history',
+        name: 'buyer-bidding-history',
+        builder: (context, state) => const BuyerBiddingHistoryScreen(),
+      ),
+      GoRoute(
+        path: '/seller/earnings',
+        name: 'seller-earnings',
+        builder: (context, state) => const SellerEarningsScreen(),
+      ),
+      GoRoute(
+        path: '/seller/winner/:productId',
+        name: 'seller-winner-details',
+        builder: (context, state) {
+          final productId = state.pathParameters['productId'] ?? '1';
+          return SellerWinnerDetailsScreen(productId: productId);
+        },
       ),
     ],
   );

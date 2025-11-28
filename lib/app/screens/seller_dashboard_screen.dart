@@ -173,19 +173,47 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                       ),
                     ],
                   ),
-                  FloatingActionButton(
-                    onPressed: () {
-                      print('🔘 Add New Listing FAB clicked');
-                      context.push('/product-create').then((result) {
-                        print('🔘 Product creation result: $result');
-                        if (result == true) {
-                          // Reload products after successful creation
-                          _loadProducts();
-                        }
-                      });
-                    },
-                    backgroundColor: AppColors.blue600,
-                    child: const Icon(Icons.add, color: Colors.white),
+                  Row(
+                    children: [
+                      IconButton(
+                        onPressed: () {
+                          context.push('/profile');
+                        },
+                        icon: const Icon(Icons.person),
+                        tooltip: 'Profile',
+                        style: IconButton.styleFrom(
+                          backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
+                          shape: const CircleBorder(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: () {
+                          context.push('/seller/earnings');
+                        },
+                        icon: const Icon(Icons.account_balance_wallet),
+                        tooltip: 'View Earnings',
+                        style: IconButton.styleFrom(
+                          backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
+                          shape: const CircleBorder(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FloatingActionButton(
+                        onPressed: () {
+                          print('🔘 Add New Listing FAB clicked');
+                          context.push('/product-create').then((result) {
+                            print('🔘 Product creation result: $result');
+                            if (result == true) {
+                              // Reload products after successful creation
+                              _loadProducts();
+                            }
+                          });
+                        },
+                        backgroundColor: AppColors.blue600,
+                        child: const Icon(Icons.add, color: Colors.white),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -657,6 +685,26 @@ class _ListingCard extends StatelessWidget {
                                 ? AppColors.textSecondaryDark
                                 : AppColors.textSecondaryLight,
                           ),
+                    ),
+                  // View Winner button for sold products
+                  if (product.status == 'sold')
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            context.go('/seller/winner/${product.id}');
+                          },
+                          icon: const Icon(Icons.emoji_events, size: 16),
+                          label: const Text('View Winner'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.green600,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                          ),
+                        ),
+                      ),
                     ),
                   // Edit/Delete buttons (only for seller's own products)
                   if (onEdit != null || onDelete != null)

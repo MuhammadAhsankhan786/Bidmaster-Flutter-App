@@ -1449,6 +1449,99 @@ class ApiService {
     await ReferralService.clearPendingReferralCode();
   }
 
+  // ==================== WALLET METHODS ====================
+
+  /// GET /api/wallet
+  /// Get unified wallet info (referral rewards + seller earnings)
+  Future<Map<String, dynamic>> getWallet() async {
+    try {
+      final response = await _dio.get('/wallet');
+
+      if (kDebugMode) {
+        print('✅ Wallet data fetched: ${response.data}');
+      }
+
+      return response.data;
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error fetching wallet: $e');
+      }
+      throw _handleError(e);
+    }
+  }
+
+  // ==================== BUYER BIDDING HISTORY METHODS ====================
+
+  /// GET /api/buyer/bidding-history
+  /// Get buyer's complete bidding history with filters
+  Future<Map<String, dynamic>> getBuyerBiddingHistory({
+    String? status,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/buyer/bidding-history',
+        queryParameters: {
+          if (status != null) 'status': status,
+          'page': page,
+          'limit': limit,
+        },
+      );
+
+      if (kDebugMode) {
+        print('✅ Bidding history fetched: ${response.data}');
+      }
+
+      return response.data;
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error fetching bidding history: $e');
+      }
+      throw _handleError(e);
+    }
+  }
+
+  // ==================== SELLER EARNINGS METHODS ====================
+
+  /// GET /api/seller/earnings
+  /// Get seller's earnings dashboard
+  Future<Map<String, dynamic>> getSellerEarnings() async {
+    try {
+      final response = await _dio.get('/seller/earnings');
+
+      if (kDebugMode) {
+        print('✅ Seller earnings fetched: ${response.data}');
+      }
+
+      return response.data;
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error fetching seller earnings: $e');
+      }
+      throw _handleError(e);
+    }
+  }
+
+  /// GET /api/auction/seller/:productId/winner
+  /// Get winner details for seller's own product
+  Future<Map<String, dynamic>> getSellerWinner(int productId) async {
+    try {
+      final response = await _dio.get('/auction/seller/$productId/winner');
+
+      if (kDebugMode) {
+        print('✅ Seller winner details fetched: ${response.data}');
+      }
+
+      return response.data;
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error fetching seller winner: $e');
+      }
+      throw _handleError(e);
+    }
+  }
+
   // ==================== CATEGORY METHODS ====================
 
   /// GET /api/categories

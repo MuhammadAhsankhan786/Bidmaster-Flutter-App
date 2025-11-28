@@ -88,10 +88,42 @@ class _PlaceBidModalState extends State<PlaceBidModal>
       });
 
       if (mounted) {
+        // Extract user-friendly error message
+        String errorMessage = 'Failed to place bid. Please try again.';
+        
+        final errorString = e.toString();
+        
+        // Handle specific error cases
+        if (errorString.contains('cannot bid on your own product') || 
+            errorString.contains('own product')) {
+          errorMessage = 'You cannot bid on your own product.';
+        } else if (errorString.contains('minimum bid') || 
+                   errorString.contains('bid amount')) {
+          errorMessage = 'Bid amount is too low. Please enter a higher amount.';
+        } else if (errorString.contains('auction ended') || 
+                   errorString.contains('expired')) {
+          errorMessage = 'This auction has ended. You cannot place bids anymore.';
+        } else if (errorString.contains('unauthorized') || 
+                   errorString.contains('login')) {
+          errorMessage = 'Please login to place a bid.';
+        } else if (errorString.contains('message')) {
+          // Try to extract message from exception
+          final match = RegExp(r'message[:\s]+([^.\n]+)').firstMatch(errorString);
+          if (match != null) {
+            errorMessage = match.group(1) ?? errorMessage;
+          }
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to place bid: $e'),
+            content: Text(errorMessage),
             backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: () {},
+            ),
           ),
         );
       }

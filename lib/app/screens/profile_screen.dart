@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../services/storage_service.dart';
+import '../services/api_service.dart';
 import 'invite_and_earn_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final bool scrollToSettings;
+  
+  const ProfileScreen({super.key, this.scrollToSettings = false});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -16,12 +19,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _userEmail;
   String? _referralCode;
   double _rewardBalance = 0.0;
+  String? _userRole;
   bool _isLoading = true;
+  bool _isTogglingRole = false;
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _settingsKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
+  }
+  
+  void _handleScrollToSettings() {
+    // Wait for data to load and widget to be built, then scroll
+    if (widget.scrollToSettings && !_isLoading) {
+      // Use multiple post-frame callbacks to ensure widget is fully built
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          _scrollToSettings();
+        });
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToSettings() {
+    // Wait for the widget to be built, then scroll
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_settingsKey.currentContext != null) {
+        Scrollable.ensureVisible(
+          _settingsKey.currentContext!,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
   }
 
   Future<void> _loadUserData() async {
@@ -35,6 +73,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final email = await StorageService.getUserEmail();
       final referralCode = await StorageService.getReferralCode();
       final rewardBalance = await StorageService.getRewardBalance();
+      final role = await StorageService.getUserRole();
 
       setState(() {
         _userName = name;
@@ -42,12 +81,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _userEmail = email;
         _referralCode = referralCode;
         _rewardBalance = rewardBalance;
+        _userRole = role;
         _isLoading = false;
       });
+      
+      // If scrollToSettings is requested, scroll after data is loaded
+      if (widget.scrollToSettings) {
+        _handleScrollToSettings();
+      }
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _toggleRole(String newRole) async {
+    if (_isTogglingRole) return;
+
+    setState(() {
+      _isTogglingRole = true;
+    });
+
+    try {
+      // Call API to update role
+      await apiService.updateProfile(role: newRole);
+
+      // Update local state
+      setState(() {
+        _userRole = newRole;
+        _isTogglingRole = false;
+      });
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Role switched to ${newRole == 'seller' ? 'Seller' : 'Buyer'}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+
+        // Navigate to appropriate dashboard
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            if (newRole == 'seller') {
+              context.go('/seller-dashboard');
+            } else {
+              context.go('/home');
+            }
+          }
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isTogglingRole = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to switch role: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
@@ -56,12 +156,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
+            onPressed: _scrollToSettings,
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadUserData,
               child: SingleChildScrollView(
+                controller: _scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -148,6 +256,84 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                     const SizedBox(height: 16),
 
+                    // Role Toggle Card
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Current Role',
+                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        (_userRole == 'seller') ? 'Seller' : (_userRole == 'buyer' ? 'Buyer' : 'Not Set'),
+                                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                              color: _userRole == 'seller' 
+                                                  ? Colors.orange[700] 
+                                                  : Colors.blue[700],
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (_isTogglingRole)
+                                  const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                else
+                                  Switch(
+                                    value: _userRole == 'seller',
+                                    onChanged: (bool value) {
+                                      _toggleRole(value ? 'seller' : 'buyer');
+                                    },
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Switch between Buyer and Seller roles',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.grey[600],
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Wallet Button
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        context.push('/wallet');
+                      },
+                      icon: const Icon(Icons.account_balance_wallet),
+                      label: const Text('Wallet'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
                     // Invite & Earn Button
                     ElevatedButton.icon(
                       onPressed: () {
@@ -165,13 +351,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 24),
 
                     // Settings Section
-                    Text(
-                      'Settings',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                    Container(
+                      key: _settingsKey,
+                      child: Text(
+                        'Settings',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
                     ),
                     const SizedBox(height: 12),
+
+                    // Role Toggle in Settings
+                    Card(
+                      child: ListTile(
+                        leading: Icon(
+                          Icons.swap_horiz,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        title: const Text('Switch Role'),
+                        subtitle: Text(
+                          'Current: ${(_userRole == 'seller') ? 'Seller' : (_userRole == 'buyer' ? 'Buyer' : 'Not Set')}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        trailing: _isTogglingRole
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Switch(
+                                value: _userRole == 'seller',
+                                onChanged: (bool value) {
+                                  _toggleRole(value ? 'seller' : 'buyer');
+                                },
+                              ),
+                        onTap: _isTogglingRole
+                            ? null
+                            : () {
+                                if (_userRole == 'seller') {
+                                  _toggleRole('buyer');
+                                } else {
+                                  _toggleRole('seller');
+                                }
+                              },
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
 
                     // Logout Button
                     Card(
