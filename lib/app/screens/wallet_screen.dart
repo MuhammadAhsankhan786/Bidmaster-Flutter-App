@@ -148,14 +148,14 @@ class _WalletScreenState extends State<WalletScreen> {
                                   Text(
                                     'Total Balance',
                                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                          color: Colors.white,
+                                          color: AppColors.cardWhite,
                                         ),
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
                                     '\$${_formatCurrency(_walletData!['total_balance'] ?? 0.0)}',
                                     style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                                          color: Colors.white,
+                                          color: AppColors.cardWhite,
                                           fontWeight: FontWeight.bold,
                                         ),
                                   ),
@@ -298,7 +298,7 @@ class _BalanceItem extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: Colors.white.withOpacity(0.8),
+            color: AppColors.cardWhite.withOpacity(0.8),
           ),
         ),
         const SizedBox(height: 4),
@@ -306,7 +306,7 @@ class _BalanceItem extends StatelessWidget {
           '\$${amount.toStringAsFixed(2)}',
           style: TextStyle(
             fontSize: 16,
-            color: Colors.white,
+            color: AppColors.cardWhite,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -314,4 +314,5 @@ class _BalanceItem extends StatelessWidget {
     );
   }
 }
+
 

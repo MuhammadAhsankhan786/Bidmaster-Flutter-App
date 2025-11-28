@@ -6,7 +6,6 @@ import 'package:dio/dio.dart';
 import '../theme/colors.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
-import '../../config/dev_config.dart' show AUTO_LOGIN_ENABLED, ONE_NUMBER_LOGIN_PHONE;
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -18,6 +17,7 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   int _currentStep = 0; // 0: phone, 1: OTP
   final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _referralController = TextEditingController();
   final TextEditingController _otpController = TextEditingController();
   final List<TextEditingController> _otpControllers = List.generate(
     6,
@@ -32,6 +32,7 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _isPhoneValid = false;
   int _otpAttempts = 0;
   String _normalizedPhone = ''; // Store normalized phone for verification
+  String _referralCode = ''; // Store referral code for OTP verification
 
   static const int _maxOTPAttempts = 5;
 
@@ -66,92 +67,12 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   void initState() {
     super.initState();
-    
-    // Auto-login for development mode
-    if (AUTO_LOGIN_ENABLED) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _performAutoLogin();
-      });
-    }
-  }
-
-  /// Auto-login function (development mode)
-  /// Note: Auto-fills phone only, user must enter OTP manually from SMS
-  Future<void> _performAutoLogin() async {
-    if (!mounted) return;
-    
-    final String devPhone = ONE_NUMBER_LOGIN_PHONE;
-    
-    if (kDebugMode) {
-      print('🚀 AUTO LOGIN ENABLED - Development Mode');
-      print('📱 Phone: $devPhone');
-      print('⚠️ Note: OTP must be entered manually from SMS (no auto-fill)');
-    }
-    
-    // Extract phone digits (remove +964 prefix)
-    String phoneDigits = devPhone.replaceAll(RegExp(r'[^\d]'), '');
-    if (phoneDigits.startsWith('964')) {
-      phoneDigits = phoneDigits.substring(3); // Remove '964' prefix
-    }
-    
-    // Set phone number in controller
-    setState(() {
-      _phoneController.text = phoneDigits;
-      _normalizedPhone = devPhone; // Use full phone with +964
-      _isPhoneValid = true;
-    });
-    
-    if (kDebugMode) {
-      print('📱 Phone digits for input: $phoneDigits');
-      print('📱 Normalized phone (will be used for OTP): $_normalizedPhone');
-    }
-    
-    // Validate phone
-    _validatePhoneNumber();
-    
-    // Wait before sending OTP
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    if (!mounted) return;
-    
-    // Send OTP via Twilio Verify
-    if (kDebugMode) {
-      print('📤 Sending OTP via Twilio Verify: $_normalizedPhone');
-    }
-    try {
-      await apiService.sendOTP(_normalizedPhone);
-      if (kDebugMode) {
-        print('✅ OTP sent successfully via Twilio Verify');
-      }
-      
-      // Move to OTP screen (user must enter OTP manually)
-      setState(() {
-        _currentStep = 1;
-      });
-      
-      // Show info message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🚀 Auto login (Dev Mode) - Enter OTP manually from SMS'),
-            backgroundColor: AppColors.info,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('⚠️ Error sending OTP: $e');
-      }
-      if (mounted) {
-        _showError('OTP Error', 'Failed to send OTP. Please try again.');
-      }
-    }
   }
 
   @override
   void dispose() {
     _phoneController.dispose();
+    _referralController.dispose();
     _otpController.dispose();
     for (var controller in _otpControllers) {
       controller.dispose();
@@ -226,6 +147,16 @@ class _AuthScreenState extends State<AuthScreen> {
         print('📤 Sending OTP request to backend with phone: $_normalizedPhone');
       }
 
+      // Store referral code if provided
+      _referralCode = _referralController.text.trim().toUpperCase();
+      if (kDebugMode) {
+        if (_referralCode.isNotEmpty) {
+          print('[REFERRAL] Code applied → $_referralCode');
+        } else {
+          print('[REFERRAL] Code applied → (empty)');
+        }
+      }
+      
       // Call POST /auth/send-otp via Twilio Verify
       await apiService.sendOTP(_normalizedPhone);
       if (kDebugMode) {
@@ -300,11 +231,16 @@ class _AuthScreenState extends State<AuthScreen> {
         // Note: OTP is hidden in logs for security
       }
       
-      // Call POST /auth/verify-otp with phone + otp
+      // Call POST /auth/verify-otp with phone + otp + referral code
       // Backend will verify OTP via Twilio Verify API
+      if (kDebugMode) {
+        print('[OTP] Referral received: ${_referralCode.isNotEmpty ? _referralCode : 'none'}');
+      }
+      
       final response = await apiService.verifyOTP(
         _normalizedPhone,
         otp,
+        referralCode: _referralCode.isNotEmpty ? _referralCode : null,
       );
       
       if (kDebugMode) {
@@ -848,6 +784,39 @@ class _AuthScreenState extends State<AuthScreen> {
           style: Theme.of(context).textTheme.bodySmall,
         ),
 
+        const SizedBox(height: 16),
+
+        // Referral Code Input (Optional)
+        TextField(
+          controller: _referralController,
+          keyboardType: TextInputType.text,
+          textCapitalization: TextCapitalization.characters,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[A-Z0-9]')),
+            LengthLimitingTextInputFormatter(6),
+          ],
+          style: const TextStyle(
+            fontSize: 16,
+            letterSpacing: 1,
+          ),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.card_giftcard, size: 20),
+            hintText: 'Enter referral code',
+            labelText: 'Referral Code (Optional)',
+            filled: true,
+            fillColor:
+                isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(24),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 16,
+            ),
+          ),
+        ),
+
         const SizedBox(height: 24),
 
         // Send OTP Button
@@ -859,7 +828,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 : _handlePhoneSubmit,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.blue600,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.cardWhite,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(24),
               ),
@@ -870,7 +839,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.cardWhite),
                     ),
                   )
                 : const Text('Send OTP'),
@@ -1000,7 +969,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 : _handleOTPVerify,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.blue600,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.cardWhite,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(24),
               ),
@@ -1011,7 +980,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.cardWhite),
                     ),
                   )
                 : const Text('Verify & Continue'),

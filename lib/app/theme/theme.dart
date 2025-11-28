@@ -10,18 +10,18 @@ class AppTheme {
       brightness: Brightness.light,
       fontFamily: AppTypography.fontFamily,
       
-      // Color scheme
+      // Color scheme - Blue + White Theme
       colorScheme: ColorScheme.light(
-        primary: AppColors.primary,
-        secondary: AppColors.secondary,
+        primary: AppColors.primaryBlue,
+        secondary: AppColors.lightBlue,
         background: AppColors.backgroundLight,
-        surface: AppColors.surfaceLight,
+        surface: AppColors.cardWhite,
         error: AppColors.error,
-        onPrimary: Colors.white,
-        onSecondary: AppColors.textPrimaryLight,
-        onBackground: AppColors.textPrimaryLight,
-        onSurface: AppColors.textPrimaryLight,
-        onError: Colors.white,
+        onPrimary: AppColors.cardWhite,
+        onSecondary: AppColors.textNavy,
+        onBackground: AppColors.textNavy,
+        onSurface: AppColors.textNavy,
+        onError: AppColors.cardWhite,
       ),
       
       // Scaffold background
@@ -29,18 +29,18 @@ class AppTheme {
       
       // App bar theme
       appBarTheme: AppBarTheme(
-        backgroundColor: AppColors.surfaceLight,
-        foregroundColor: AppColors.textPrimaryLight,
+        backgroundColor: AppColors.cardWhite,
+        foregroundColor: AppColors.textNavy,
         elevation: 0,
         centerTitle: false,
         titleTextStyle: AppTypography.titleLarge.copyWith(
-          color: AppColors.textPrimaryLight,
+          color: AppColors.textNavy,
         ),
       ),
       
       // Card theme
       cardTheme: CardThemeData(
-        color: AppColors.surfaceLight,
+        color: AppColors.cardWhite,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16), // rounded-2xl
@@ -89,18 +89,18 @@ class AppTheme {
       // Input decoration theme
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surfaceLight,
+        fillColor: AppColors.cardWhite,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24), // rounded-2xl
-          borderSide: BorderSide(color: AppColors.textSecondaryLight.withOpacity(0.3)),
+          borderSide: BorderSide(color: AppColors.borderGrey),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24), // rounded-2xl
-          borderSide: BorderSide(color: AppColors.textSecondaryLight.withOpacity(0.3)),
+          borderSide: BorderSide(color: AppColors.borderGrey),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24), // rounded-2xl
-          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+          borderSide: const BorderSide(color: AppColors.primaryBlue, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24), // rounded-2xl
@@ -123,13 +123,13 @@ class AppTheme {
       
       // Icon theme
       iconTheme: const IconThemeData(
-        color: AppColors.textPrimaryLight,
+        color: AppColors.textNavy,
         size: 24,
       ),
       
       // Divider theme
       dividerTheme: DividerThemeData(
-        color: AppColors.textSecondaryLight.withOpacity(0.2),
+        color: AppColors.borderGrey,
         thickness: 1,
         space: 1,
       ),
@@ -143,18 +143,18 @@ class AppTheme {
       brightness: Brightness.dark,
       fontFamily: AppTypography.fontFamily,
       
-      // Color scheme
+      // Color scheme - Blue + White Theme (Dark Mode)
       colorScheme: ColorScheme.dark(
-        primary: AppColors.primary,
-        secondary: AppColors.secondary,
+        primary: AppColors.primaryBlue,
+        secondary: AppColors.lightBlue,
         background: AppColors.backgroundDark,
         surface: AppColors.surfaceDark,
         error: AppColors.error,
-        onPrimary: Colors.white,
+        onPrimary: AppColors.cardWhite,
         onSecondary: AppColors.textPrimaryDark,
         onBackground: AppColors.textPrimaryDark,
         onSurface: AppColors.textPrimaryDark,
-        onError: Colors.white,
+        onError: AppColors.cardWhite,
       ),
       
       // Scaffold background
@@ -183,8 +183,8 @@ class AppTheme {
       // Elevated button theme
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
+          backgroundColor: AppColors.primaryBlue,
+          foregroundColor: AppColors.cardWhite,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           shape: RoundedRectangleBorder(
@@ -197,8 +197,8 @@ class AppTheme {
       // Outlined button theme
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.primary,
-          side: const BorderSide(color: AppColors.primary, width: 1.5),
+          foregroundColor: AppColors.primaryBlue,
+          side: const BorderSide(color: AppColors.primaryBlue, width: 1.5),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24), // rounded-2xl/3xl
@@ -210,7 +210,7 @@ class AppTheme {
       // Text button theme
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: AppColors.primary,
+          foregroundColor: AppColors.primaryBlue,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24), // rounded-2xl/3xl
@@ -233,7 +233,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24), // rounded-2xl
-          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+          borderSide: const BorderSide(color: AppColors.primaryBlue, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24), // rounded-2xl

@@ -154,7 +154,7 @@ class _SplashScreenState extends State<SplashScreen>
                         Text(
                           'BidMaster',
                           style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                                color: Colors.white,
+                                color: AppColors.cardWhite,
                                 fontWeight: FontWeight.bold,
                               ),
                         ),

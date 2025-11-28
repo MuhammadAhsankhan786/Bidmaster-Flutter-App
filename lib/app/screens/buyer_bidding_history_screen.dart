@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
 import '../services/api_service.dart';
@@ -14,38 +15,80 @@ class BuyerBiddingHistoryScreen extends StatefulWidget {
 class _BuyerBiddingHistoryScreenState extends State<BuyerBiddingHistoryScreen> {
   List<Map<String, dynamic>> _bids = [];
   Map<String, dynamic>? _analytics;
-  bool _isLoading = true;
+  bool _isLoading = false; // Start as false, set to true when loading
+  bool _isLoadingMore = false; // Guard for load more
   String? _errorMessage;
   String? _selectedStatus;
   int _currentPage = 1;
   bool _hasMore = true;
+  bool _loadMoreScheduled = false; // Prevent duplicate load more calls
+  bool _hasInitialLoad = false; // Track if initial load has been attempted
 
   @override
   void initState() {
     super.initState();
-    _loadBiddingHistory();
+    // Ensure load is called exactly once after frame is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_hasInitialLoad) {
+        _hasInitialLoad = true;
+        _loadBiddingHistory();
+      }
+    });
   }
 
   Future<void> _loadBiddingHistory({bool loadMore = false}) async {
-    if (_isLoading && !loadMore) return;
-
-    setState(() {
-      if (!loadMore) {
+    // Prevent race conditions
+    if (loadMore) {
+      if (_isLoadingMore || _isLoading || !_hasMore || _loadMoreScheduled) {
+        if (kDebugMode) {
+          print('[Buyer Bids] Load more blocked: isLoadingMore=$_isLoadingMore, isLoading=$_isLoading, hasMore=$_hasMore, scheduled=$_loadMoreScheduled');
+        }
+        return;
+      }
+      setState(() {
+        _isLoadingMore = true;
+        _loadMoreScheduled = true;
+      });
+    } else {
+      // For initial load, allow it even if _isLoading is true (first time)
+      if (_isLoading && _bids.isNotEmpty) {
+        if (kDebugMode) {
+          print('[Buyer Bids] Initial load blocked: already loading and has data');
+        }
+        return;
+      }
+      setState(() {
         _isLoading = true;
         _currentPage = 1;
-        _bids = [];
+        if (!loadMore) {
+          _bids = []; // Clear bids only on fresh load, not on filter change
+        }
         _hasMore = true;
-      }
+        _loadMoreScheduled = false;
+      });
+    }
+    
+    setState(() {
       _errorMessage = null;
     });
 
     try {
       final page = loadMore ? _currentPage + 1 : 1;
+      final limit = 20;
+      
+      if (kDebugMode) {
+        print('[Buyer Bids] Fetching: status=$_selectedStatus, page=$page, limit=$limit, loadMore=$loadMore');
+      }
+      
       final response = await apiService.getBuyerBiddingHistory(
         status: _selectedStatus,
         page: page,
-        limit: 20,
+        limit: limit,
       );
+      
+      if (kDebugMode) {
+        print('[Buyer Bids] API Response received: success=${response['success']}, dataCount=${(response['data'] as List?)?.length ?? 0}');
+      }
 
       if (response['success'] == true) {
         final newBids = ((response['data'] as List?) ?? [])
@@ -54,28 +97,64 @@ class _BuyerBiddingHistoryScreenState extends State<BuyerBiddingHistoryScreen> {
         final analytics = response['analytics'] as Map<String, dynamic>?;
         final pagination = response['pagination'] as Map<String, dynamic>?;
 
+        if (kDebugMode) {
+          print('[Buyer Bids] Processing response: newBids=${newBids.length}, loadMore=$loadMore');
+        }
+
         setState(() {
           if (loadMore) {
             _bids.addAll(newBids);
             _currentPage = page;
+            _isLoadingMore = false;
+            _loadMoreScheduled = false;
           } else {
             _bids = newBids;
             _currentPage = 1;
             _analytics = analytics;
+            _isLoading = false; // Always set to false after load completes
+            _loadMoreScheduled = false;
           }
-          _hasMore = pagination != null && page < (pagination['pages'] ?? 1);
-          _isLoading = false;
+          _hasMore = pagination != null && 
+                     pagination['pages'] != null && 
+                     page < (pagination['pages'] as int);
+          
+          if (kDebugMode) {
+            print('[Buyer Bids] State updated: bidsCount=${_bids.length}, hasMore=$_hasMore, currentPage=$_currentPage, isLoading=$_isLoading');
+            if (_bids.isEmpty) {
+              print('[Buyer Bids] ⚠️ No bids found - will show empty state');
+            }
+          }
         });
       } else {
+        if (kDebugMode) {
+          print('[Buyer Bids] API returned success=false: ${response['message']}');
+        }
         setState(() {
           _errorMessage = response['message'] ?? 'Failed to load bidding history';
           _isLoading = false;
+          _isLoadingMore = false;
+          _loadMoreScheduled = false;
         });
       }
     } catch (e) {
+      if (kDebugMode) {
+        print('[Buyer Bids] API Error: $e');
+      }
+      
+      String errorMsg = 'Failed to load bidding history';
+      if (e.toString().contains('Network')) {
+        errorMsg = 'Network error. Please check your connection.';
+      } else if (e.toString().contains('401') || e.toString().contains('unauthorized')) {
+        errorMsg = 'Session expired. Please login again.';
+      } else if (e.toString().contains('500')) {
+        errorMsg = 'Server error. Please try again later.';
+      }
+      
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = errorMsg;
         _isLoading = false;
+        _isLoadingMore = false;
+        _loadMoreScheduled = false;
       });
     }
   }
@@ -103,6 +182,8 @@ class _BuyerBiddingHistoryScreenState extends State<BuyerBiddingHistoryScreen> {
         return AppColors.blue600;
       case 'lost':
         return AppColors.red600;
+      case 'ended':
+        return AppColors.slate600;
       default:
         return AppColors.slate600;
     }
@@ -116,6 +197,8 @@ class _BuyerBiddingHistoryScreenState extends State<BuyerBiddingHistoryScreen> {
         return Icons.access_time;
       case 'lost':
         return Icons.cancel;
+      case 'ended':
+        return Icons.event_busy;
       default:
         return Icons.info;
     }
@@ -159,7 +242,7 @@ class _BuyerBiddingHistoryScreenState extends State<BuyerBiddingHistoryScreen> {
                   Expanded(
                     child: _StatCard(
                       label: 'Total Bids',
-                      value: '${_analytics!['total_bids'] ?? 0}',
+                      value: '${_analytics?['total_bids'] ?? 0}',
                       color: AppColors.blue600,
                     ),
                   ),
@@ -167,7 +250,7 @@ class _BuyerBiddingHistoryScreenState extends State<BuyerBiddingHistoryScreen> {
                   Expanded(
                     child: _StatCard(
                       label: 'Total Amount',
-                      value: '\$${_formatCurrency((_analytics!['total_amount_bid'] ?? 0.0).toDouble())}',
+                      value: '\$${_formatCurrency((_analytics?['total_amount_bid'] ?? 0.0).toDouble())}',
                       color: AppColors.green600,
                     ),
                   ),
@@ -175,7 +258,7 @@ class _BuyerBiddingHistoryScreenState extends State<BuyerBiddingHistoryScreen> {
                   Expanded(
                     child: _StatCard(
                       label: 'Win Rate',
-                      value: '${_analytics!['win_rate'] ?? 0}%',
+                      value: '${(_analytics?['win_rate'] ?? 0.0).toStringAsFixed(1)}%',
                       color: AppColors.yellow600,
                     ),
                   ),
@@ -221,6 +304,12 @@ class _BuyerBiddingHistoryScreenState extends State<BuyerBiddingHistoryScreen> {
                     isSelected: _selectedStatus == 'lost',
                     onSelected: () => _onStatusFilterChanged('lost'),
                   ),
+                  const SizedBox(width: 8),
+                  _FilterChip(
+                    label: 'Ended',
+                    isSelected: _selectedStatus == 'ended',
+                    onSelected: () => _onStatusFilterChanged('ended'),
+                  ),
                 ],
               ),
             ),
@@ -244,13 +333,18 @@ class _BuyerBiddingHistoryScreenState extends State<BuyerBiddingHistoryScreen> {
                             ),
                             const SizedBox(height: 16),
                             ElevatedButton(
-                              onPressed: () => _loadBiddingHistory(),
+                              onPressed: () {
+                                setState(() {
+                                  _errorMessage = null;
+                                });
+                                _loadBiddingHistory();
+                              },
                               child: const Text('Retry'),
                             ),
                           ],
                         ),
                       )
-                    : _bids.isEmpty
+                    : !_isLoading && _bids.isEmpty
                         ? Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -276,24 +370,36 @@ class _BuyerBiddingHistoryScreenState extends State<BuyerBiddingHistoryScreen> {
                               itemCount: _bids.length + (_hasMore ? 1 : 0),
                               itemBuilder: (context, index) {
                                 if (index == _bids.length) {
-                                  if (!_isLoading) {
-                                    _loadBiddingHistory(loadMore: true);
+                                  // Load more with proper await and guard - prevent duplicate calls
+                                  if (!_isLoading && !_isLoadingMore && _hasMore && !_loadMoreScheduled) {
+                                    // Schedule load more after current frame
+                                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                                      if (mounted && !_isLoading && !_isLoadingMore && _hasMore && !_loadMoreScheduled) {
+                                        _loadBiddingHistory(loadMore: true);
+                                      }
+                                    });
                                   }
-                                  return const Center(
-                                    child: Padding(
-                                      padding: EdgeInsets.all(16.0),
-                                      child: CircularProgressIndicator(),
-                                    ),
-                                  );
+                                  // Only show loading indicator if actually loading
+                                  if (_isLoadingMore) {
+                                    return const Center(
+                                      child: Padding(
+                                        padding: EdgeInsets.all(16.0),
+                                        child: CircularProgressIndicator(),
+                                      ),
+                                    );
+                                  }
+                                  // If no more data, return empty widget
+                                  return const SizedBox.shrink();
                                 }
 
                                 final bid = _bids[index];
                                 final status = bid['bid_status'] ?? 'unknown';
                                 final productTitle = bid['product_title'] ?? 'Unknown Product';
                                 final amount = (bid['amount'] ?? 0.0).toDouble();
-                                final bidDate = bid['bid_date'] != null
-                                    ? DateTime.parse(bid['bid_date'])
-                                    : DateTime.now();
+                                final bidDateStr = bid['bid_date'];
+                                final bidDate = bidDateStr != null && bidDateStr.toString().isNotEmpty
+                                    ? DateTime.tryParse(bidDateStr.toString()) ?? DateTime(1970)
+                                    : DateTime(1970);
                                 final productId = bid['product_id'];
 
                                 return Card(
@@ -316,7 +422,11 @@ class _BuyerBiddingHistoryScreenState extends State<BuyerBiddingHistoryScreen> {
                                     subtitle: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text(_formatDate(bidDate)),
+                                        Text(
+                                          bidDateStr != null && bidDateStr.toString().isNotEmpty
+                                              ? _formatDate(bidDate)
+                                              : 'Date not available',
+                                        ),
                                         const SizedBox(height: 4),
                                         Container(
                                           padding: const EdgeInsets.symmetric(
@@ -356,7 +466,14 @@ class _BuyerBiddingHistoryScreenState extends State<BuyerBiddingHistoryScreen> {
                                         ? () {
                                             context.go('/product-details/$productId');
                                           }
-                                        : null,
+                                        : () {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('Product information unavailable'),
+                                                duration: Duration(seconds: 2),
+                                              ),
+                                            );
+                                          },
                                   ),
                                 );
                               },
@@ -437,7 +554,7 @@ class _FilterChip extends StatelessWidget {
       selectedColor: AppColors.blue600,
       labelStyle: TextStyle(
         color: isSelected
-            ? Colors.white
+            ? AppColors.cardWhite
             : (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
         fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
       ),

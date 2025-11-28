@@ -117,7 +117,7 @@ class _SellerEarningsScreenState extends State<SellerEarningsScreen> {
                               padding: const EdgeInsets.all(24),
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
-                                  colors: [AppColors.green600, AppColors.green700],
+                                  colors: [AppColors.primaryBlue, AppColors.darkBlue],
                                 ),
                                 borderRadius: BorderRadius.circular(24),
                               ),
@@ -126,14 +126,14 @@ class _SellerEarningsScreenState extends State<SellerEarningsScreen> {
                                   Text(
                                     'Total Earnings',
                                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                          color: Colors.white,
+                                          color: AppColors.cardWhite,
                                         ),
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
                                     '\$${_formatCurrency(_earningsData!['total_earnings'] ?? 0.0)}',
                                     style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                                          color: Colors.white,
+                                          color: AppColors.cardWhite,
                                           fontWeight: FontWeight.bold,
                                         ),
                                   ),
@@ -316,7 +316,7 @@ class _EarningsStat extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: Colors.white.withOpacity(0.8),
+            color: AppColors.cardWhite.withOpacity(0.8),
           ),
         ),
         const SizedBox(height: 4),
@@ -324,7 +324,7 @@ class _EarningsStat extends StatelessWidget {
           '\$${amount.toStringAsFixed(2)}',
           style: const TextStyle(
             fontSize: 16,
-            color: Colors.white,
+            color: AppColors.cardWhite,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -389,4 +389,5 @@ class _StatCard extends StatelessWidget {
     );
   }
 }
+
 

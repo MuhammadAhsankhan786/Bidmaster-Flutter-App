@@ -302,7 +302,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                             shape: BoxShape.circle,
                             color: isDark ? AppColors.slate800 : AppColors.slate200,
                             border: Border.all(
-                              color: isDark ? AppColors.slate900 : Colors.white,
+                              color: isDark ? AppColors.slate900 : AppColors.cardWhite,
                               width: 4,
                             ),
                             boxShadow: [
@@ -349,7 +349,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                               color: AppColors.blue600,
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: isDark ? AppColors.slate900 : Colors.white,
+                                color: isDark ? AppColors.slate900 : AppColors.cardWhite,
                                 width: 3,
                               ),
                               boxShadow: [
@@ -363,7 +363,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                             child: const Icon(
                               Icons.camera_alt,
                               size: 20,
-                              color: Colors.white,
+                              color: AppColors.cardWhite,
                             ),
                           ),
                         ),
@@ -525,7 +525,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     onPressed: _handleSubmit,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.blue600,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.cardWhite,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(24),
                       ),

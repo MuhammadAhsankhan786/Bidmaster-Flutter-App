@@ -121,7 +121,7 @@ class _PlaceBidModalState extends State<PlaceBidModal>
             duration: const Duration(seconds: 4),
             action: SnackBarAction(
               label: 'OK',
-              textColor: Colors.white,
+              textColor: AppColors.cardWhite,
               onPressed: () {},
             ),
           ),
@@ -483,7 +483,7 @@ class _PlaceBidModalState extends State<PlaceBidModal>
                         : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.blue600,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.cardWhite,
                       disabledBackgroundColor: AppColors.blue600.withOpacity(0.5),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(24),
@@ -496,7 +496,7 @@ class _PlaceBidModalState extends State<PlaceBidModal>
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                                  AlwaysStoppedAnimation<Color>(AppColors.cardWhite),
                             ),
                           )
                         : const Text(

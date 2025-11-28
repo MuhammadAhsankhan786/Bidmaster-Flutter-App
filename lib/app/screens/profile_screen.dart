@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../services/storage_service.dart';
 import '../services/api_service.dart';
+import '../theme/colors.dart';
+import '../widgets/user_info_card.dart';
+import '../widgets/reward_balance_card.dart';
+import '../widgets/role_toggle_card.dart';
+import '../widgets/theme_toggle_tile.dart';
 import 'invite_and_earn_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -118,7 +123,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Role switched to ${newRole == 'seller' ? 'Seller' : 'Buyer'}'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.success,
             duration: const Duration(seconds: 2),
           ),
         );
@@ -143,7 +148,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to switch role: ${e.toString()}'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.error,
             duration: const Duration(seconds: 3),
           ),
         );
@@ -176,175 +181,69 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // User Info Card
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          children: [
-                            CircleAvatar(
-                              radius: 40,
-                              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                              child: Icon(
-                                Icons.person,
-                                size: 40,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              _userName ?? 'User',
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                            ),
-                            if (_userEmail != null) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                _userEmail!,
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
-                            ],
-                            if (_userPhone != null) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                _userPhone!,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ],
-                        ),
+                    RepaintBoundary(
+                      child: UserInfoCard(
+                        userName: _userName,
+                        userEmail: _userEmail,
+                        userPhone: _userPhone,
                       ),
                     ),
 
                     const SizedBox(height: 16),
 
                     // Reward Balance Card
-                    Card(
-                      color: Colors.green[50],
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Reward Balance',
-                                  style: Theme.of(context).textTheme.titleMedium,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  '\$${_rewardBalance.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green[700],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Icon(
-                              Icons.account_balance_wallet,
-                              size: 48,
-                              color: Colors.green[700],
-                            ),
-                          ],
-                        ),
+                    RepaintBoundary(
+                      child: RewardBalanceCard(
+                        rewardBalance: _rewardBalance,
                       ),
                     ),
 
                     const SizedBox(height: 16),
 
                     // Role Toggle Card
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Current Role',
-                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        (_userRole == 'seller') ? 'Seller' : (_userRole == 'buyer' ? 'Buyer' : 'Not Set'),
-                                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                              color: _userRole == 'seller' 
-                                                  ? Colors.orange[700] 
-                                                  : Colors.blue[700],
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (_isTogglingRole)
-                                  const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                else
-                                  Switch(
-                                    value: _userRole == 'seller',
-                                    onChanged: (bool value) {
-                                      _toggleRole(value ? 'seller' : 'buyer');
-                                    },
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Switch between Buyer and Seller roles',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Colors.grey[600],
-                                  ),
-                            ),
-                          ],
-                        ),
+                    RepaintBoundary(
+                      child: RoleToggleCard(
+                        userRole: _userRole,
+                        isTogglingRole: _isTogglingRole,
+                        onRoleChanged: (bool value) {
+                          _toggleRole(value ? 'seller' : 'buyer');
+                        },
                       ),
                     ),
 
                     const SizedBox(height: 16),
 
                     // Wallet Button
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        context.push('/wallet');
-                      },
-                      icon: const Icon(Icons.account_balance_wallet),
-                      label: const Text('Wallet'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                    RepaintBoundary(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          context.push('/wallet');
+                        },
+                        icon: const Icon(Icons.account_balance_wallet),
+                        label: const Text('Wallet'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                        ),
                       ),
                     ),
 
                     const SizedBox(height: 12),
 
                     // Invite & Earn Button
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        context.push('/invite-and-earn');
-                      },
-                      icon: const Icon(Icons.people),
-                      label: const Text('Invite & Earn'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                    RepaintBoundary(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          context.push('/invite-and-earn');
+                        },
+                        icon: const Icon(Icons.people),
+                        label: const Text('Invite & Earn'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                        ),
                       ),
                     ),
 
@@ -361,6 +260,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
+
+                    // Theme Toggle
+                    RepaintBoundary(
+                      child: const ThemeToggleTile(),
+                    ),
+
+                    const SizedBox(height: 8),
 
                     // Role Toggle in Settings
                     Card(
@@ -403,7 +309,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     // Logout Button
                     Card(
                       child: ListTile(
-                        leading: const Icon(Icons.logout, color: Colors.red),
+                        leading: const Icon(Icons.logout, color: AppColors.error),
                         title: const Text('Logout'),
                         onTap: () async {
                           final shouldLogout = await showDialog<bool>(
@@ -418,7 +324,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                                 TextButton(
                                   onPressed: () => Navigator.pop(context, true),
-                                  child: const Text('Logout', style: TextStyle(color: Colors.red)),
+                                  child: const Text('Logout', style: TextStyle(color: AppColors.error)),
                                 ),
                               ],
                             ),

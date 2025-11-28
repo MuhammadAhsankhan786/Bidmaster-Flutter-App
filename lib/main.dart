@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:get_storage/get_storage.dart';
 import 'package:app_links/app_links.dart';
 import 'app/router/app_router.dart';
 import 'app/theme/theme.dart';
 import 'app/services/storage_service.dart';
 import 'app/services/referral_service.dart';
+import 'app/services/theme_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +35,9 @@ void main() async {
     // Initialize SharedPreferences before any navigation
     // This prevents white screen in release mode
     await SharedPreferences.getInstance();
+    
+    // Initialize GetStorage for theme persistence
+    await GetStorage.init();
     
     // Check for existing session and auto-login
     // Auto-login works in both debug and release mode (as per requirements)
@@ -96,16 +101,44 @@ void _initDeepLinks() {
   });
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Listen to theme changes
+    ThemeService.themeNotifier.addListener(_onThemeChanged);
+  }
+
+  @override
+  void dispose() {
+    ThemeService.themeNotifier.removeListener(_onThemeChanged);
+    super.dispose();
+  }
+
+  void _onThemeChanged() {
+    setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'BidMaster',
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      routerConfig: AppRouter.router,
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeService.themeNotifier,
+      builder: (context, themeMode, child) {
+        return MaterialApp.router(
+          title: 'BidMaster',
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeMode,
+          routerConfig: AppRouter.router,
+        );
+      },
     );
   }
 }

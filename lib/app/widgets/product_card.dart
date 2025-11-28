@@ -73,7 +73,7 @@ class ProductCard extends StatelessWidget {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
+                        color: AppColors.cardWhite.withOpacity(0.9),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(

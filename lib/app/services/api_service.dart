@@ -346,12 +346,21 @@ class ApiService {
 
   /// POST /api/auth/verify-otp
   /// ✅ LIVE: Uses Twilio Verify API to verify OTP
-  Future<Map<String, dynamic>> verifyOTP(String phone, String otp) async {
+  Future<Map<String, dynamic>> verifyOTP(
+    String phone,
+    String otp, {
+    String? referralCode,
+  }) async {
     try {
       if (kDebugMode) {
         print('🔐 Verifying OTP via Twilio Verify');
         print('📱 Phone: $phone');
         print('🔑 OTP: [hidden]');
+        if (referralCode != null && referralCode.isNotEmpty) {
+          print('[API] Sending referral code: $referralCode');
+        } else {
+          print('[API] Sending referral code: (none)');
+        }
       }
       
       // Normalize phone to match backend format
@@ -368,19 +377,22 @@ class ApiService {
         }
       }
       
-      // Get pending referral code if exists
-      final referralCode = await _getPendingReferralCode();
+      // Get pending referral code from storage if not provided directly
+      String? finalReferralCode = referralCode;
+      if (finalReferralCode == null || finalReferralCode.isEmpty) {
+        finalReferralCode = await _getPendingReferralCode();
+      }
       
       final requestData = {
         'phone': normalizedPhone,
         'otp': otp,
       };
       
-      // Add referral code if available
-      if (referralCode != null && referralCode.isNotEmpty) {
-        requestData['referral_code'] = referralCode;
+      // Add referral code if available (from parameter or storage)
+      if (finalReferralCode != null && finalReferralCode.isNotEmpty) {
+        requestData['referral_code'] = finalReferralCode;
         if (kDebugMode) {
-          print('📎 Including referral code in verify-otp request: $referralCode');
+          print('📎 Including referral code in verify-otp request: $finalReferralCode');
         }
       }
       
@@ -1480,23 +1492,61 @@ class ApiService {
     int limit = 20,
   }) async {
     try {
+      // Build query parameters
+      final queryParams = <String, dynamic>{
+        'page': page,
+        'limit': limit,
+      };
+      if (status != null && status.isNotEmpty) {
+        queryParams['status'] = status;
+      }
+
+      // Verify token exists
+      final token = await StorageService.getAccessToken();
+      if (kDebugMode) {
+        print('============================================================');
+        print('[FLUTTER] MyBids calling backend…');
+        print('============================================================');
+        print('[Buyer Bids API] Endpoint: GET /buyer/bidding-history');
+        print('[Buyer Bids API] Query params: $queryParams');
+        print('[Buyer Bids API] Token exists: ${token != null}');
+        print('[Buyer Bids API] Full URL: ${baseUrl}/buyer/bidding-history');
+        print('[Buyer Bids API] Request timestamp: ${DateTime.now()}');
+      }
+
       final response = await _dio.get(
         '/buyer/bidding-history',
-        queryParameters: {
-          if (status != null) 'status': status,
-          'page': page,
-          'limit': limit,
-        },
+        queryParameters: queryParams,
       );
 
       if (kDebugMode) {
-        print('✅ Bidding history fetched: ${response.data}');
+        print('[Buyer Bids API] ✅ Response received');
+        print('[Buyer Bids API] Status: ${response.statusCode}');
+        print('[Buyer Bids API] Success: ${response.data['success']}');
+        final dataList = response.data['data'] as List?;
+        final dataCount = dataList?.length ?? 0;
+        print('[Buyer Bids API] Data count: $dataCount');
+        print('[Buyer Bids API] Has analytics: ${response.data['analytics'] != null}');
+        print('[Buyer Bids API] Has pagination: ${response.data['pagination'] != null}');
+        if (dataCount > 0) {
+          print('[Buyer Bids API] Sample bid: ${dataList![0]}');
+        } else {
+          print('[Buyer Bids API] ⚠️ No bids returned - will show empty state');
+        }
+        print('============================================================');
       }
 
       return response.data;
     } catch (e) {
       if (kDebugMode) {
-        print('❌ Error fetching bidding history: $e');
+        print('[Buyer Bids API] ❌ Error: $e');
+        if (e is DioException) {
+          print('[Buyer Bids API] Error type: ${e.type}');
+          print('[Buyer Bids API] Status code: ${e.response?.statusCode}');
+          print('[Buyer Bids API] Response data: ${e.response?.data}');
+          print('[Buyer Bids API] Request path: ${e.requestOptions.path}');
+          print('[Buyer Bids API] Request baseUrl: ${e.requestOptions.baseUrl}');
+        }
       }
       throw _handleError(e);
     }

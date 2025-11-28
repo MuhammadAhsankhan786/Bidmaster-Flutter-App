@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
+import '../theme/colors.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 
 class InviteAndEarnScreen extends StatefulWidget {
@@ -186,13 +187,13 @@ Start earning today! 💰
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'awarded':
-        return Colors.green;
+        return AppColors.success;
       case 'pending':
-        return Colors.orange;
+        return AppColors.warning;
       case 'revoked':
-        return Colors.red;
+        return AppColors.error;
       default:
-        return Colors.grey;
+        return AppColors.slate400;
     }
   }
 
@@ -223,7 +224,7 @@ Start earning today! 💰
                       Icon(
                         Icons.error_outline,
                         size: 64,
-                        color: Colors.red[300],
+                        color: AppColors.error,
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -317,7 +318,7 @@ Start earning today! 💰
                         // Reward Balance Card
                         Card(
                           elevation: 2,
-                          color: Colors.green[50],
+                          color: AppColors.blue50,
                           child: Padding(
                             padding: const EdgeInsets.all(20),
                             child: Column(
@@ -328,7 +329,7 @@ Start earning today! 💰
                                     Icon(
                                       Icons.account_balance_wallet,
                                       size: 32,
-                                      color: Colors.green[700],
+                                      color: AppColors.primaryBlue,
                                     ),
                                     const SizedBox(width: 12),
                                     Text(
@@ -345,7 +346,7 @@ Start earning today! 💰
                                   style: TextStyle(
                                     fontSize: 36,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.green[700],
+                                    color: AppColors.primaryBlue,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -386,7 +387,7 @@ Start earning today! 💰
                                           Icon(
                                             Icons.people_outline,
                                             size: 64,
-                                            color: Colors.grey[400],
+                                            color: AppColors.slate400,
                                           ),
                                           const SizedBox(height: 16),
                                           Text(
@@ -403,89 +404,103 @@ Start earning today! 💰
                                       ),
                                     ),
                                   )
-                                : Column(
-                                    children: [
-                                      ..._referralHistory.map((referral) {
-                                        return Card(
-                                          margin: const EdgeInsets.only(bottom: 8),
-                                          child: ListTile(
-                                            leading: CircleAvatar(
-                                              backgroundColor: _getStatusColor(
-                                                referral['status'] ?? 'pending',
-                                              ).withOpacity(0.2),
-                                              child: Icon(
-                                                Icons.person,
-                                                color: _getStatusColor(
+                                : RepaintBoundary(
+                                    child: ListView.separated(
+                                      shrinkWrap: true,
+                                      physics: const NeverScrollableScrollPhysics(),
+                                      itemCount: _referralHistory.length + (_hasMore ? 1 : 0) + (_isLoadingHistory ? 1 : 0),
+                                      separatorBuilder: (context, index) => const SizedBox(height: 8),
+                                      itemBuilder: (context, index) {
+                                        if (index == _referralHistory.length) {
+                                          if (_isLoadingHistory) {
+                                            return const Padding(
+                                              padding: EdgeInsets.all(16.0),
+                                              child: Center(child: CircularProgressIndicator()),
+                                            );
+                                          }
+                                          if (_hasMore) {
+                                            return Padding(
+                                              padding: const EdgeInsets.all(16.0),
+                                              child: ElevatedButton(
+                                                onPressed: () => _loadReferralHistory(loadMore: true),
+                                                child: const Text('Load More'),
+                                              ),
+                                            );
+                                          }
+                                          return const SizedBox.shrink();
+                                        }
+                                        
+                                        final referral = _referralHistory[index];
+                                        return RepaintBoundary(
+                                          child: Card(
+                                            margin: EdgeInsets.zero,
+                                            child: ListTile(
+                                              leading: CircleAvatar(
+                                                backgroundColor: _getStatusColor(
                                                   referral['status'] ?? 'pending',
-                                                ),
-                                              ),
-                                            ),
-                                            title: Text(
-                                              referral['invitee_phone'] ?? 'Unknown',
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                            subtitle: Text(
-                                              _formatDate(
-                                                referral['created_at'] ?? '',
-                                              ),
-                                            ),
-                                            trailing: Column(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              crossAxisAlignment: CrossAxisAlignment.end,
-                                              children: [
-                                                Text(
-                                                  '\$${(referral['amount'] ?? 0.0).toStringAsFixed(2)}',
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.green[700],
+                                                ).withOpacity(0.2),
+                                                child: Icon(
+                                                  Icons.person,
+                                                  color: _getStatusColor(
+                                                    referral['status'] ?? 'pending',
                                                   ),
                                                 ),
-                                                const SizedBox(height: 4),
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 2,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: _getStatusColor(
-                                                      referral['status'] ?? 'pending',
-                                                    ).withOpacity(0.2),
-                                                    borderRadius: BorderRadius.circular(12),
-                                                  ),
-                                                  child: Text(
-                                                    _getStatusText(
-                                                      referral['status'] ?? 'pending',
+                                              ),
+                                              title: Text(
+                                                referral['invitee_phone'] ?? 'Unknown',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                              subtitle: Text(
+                                                _formatDate(
+                                                  referral['created_at'] ?? '',
+                                                ),
+                                              ),
+                                              trailing: Column(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                crossAxisAlignment: CrossAxisAlignment.end,
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    '\$${(referral['amount'] ?? 0.0).toStringAsFixed(2)}',
+                                                    style: const TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      color: AppColors.primaryBlue,
                                                     ),
-                                                    style: TextStyle(
-                                                      fontSize: 10,
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 2,
+                                                    ),
+                                                    decoration: BoxDecoration(
                                                       color: _getStatusColor(
                                                         referral['status'] ?? 'pending',
+                                                      ).withOpacity(0.2),
+                                                      borderRadius: BorderRadius.circular(12),
+                                                    ),
+                                                    child: Text(
+                                                      _getStatusText(
+                                                        referral['status'] ?? 'pending',
                                                       ),
-                                                      fontWeight: FontWeight.w600,
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: _getStatusColor(
+                                                          referral['status'] ?? 'pending',
+                                                        ),
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
                                                     ),
                                                   ),
-                                                ),
-                                              ],
+                                                ],
+                                              ),
                                             ),
                                           ),
                                         );
-                                      }),
-                                      if (_hasMore && !_isLoadingHistory)
-                                        Padding(
-                                          padding: const EdgeInsets.all(16.0),
-                                          child: ElevatedButton(
-                                            onPressed: () => _loadReferralHistory(loadMore: true),
-                                            child: const Text('Load More'),
-                                          ),
-                                        ),
-                                      if (_isLoadingHistory)
-                                        const Padding(
-                                          padding: EdgeInsets.all(16.0),
-                                          child: CircularProgressIndicator(),
-                                        ),
-                                    ],
+                                      },
+                                    ),
                                   ),
                       ],
                     ),

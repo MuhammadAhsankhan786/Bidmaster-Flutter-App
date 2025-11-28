@@ -280,7 +280,7 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
                           const SizedBox(width: 8),
                           IconButton(
                             onPressed: () {
-                              context.push('/buyer/bidding-history');
+                              context.go('/buyer/bidding-history');
                             },
                             icon: const Icon(Icons.history),
                             tooltip: 'Bidding History',
@@ -371,7 +371,7 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
                               selectedColor: AppColors.blue600,
                               labelStyle: TextStyle(
                                 color: isSelected
-                                    ? Colors.white
+                                    ? AppColors.cardWhite
                                     : (isDark
                                         ? AppColors.textPrimaryDark
                                         : AppColors.textPrimaryLight),
@@ -408,7 +408,7 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
                             icon: Icons.access_time,
                             label: 'Ending Soon',
                             value: '0', // Will be calculated from API data
-                            gradientColors: [AppColors.yellow500, AppColors.yellow600],
+                            gradientColors: [AppColors.lightBlue, AppColors.primaryBlue],
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -417,7 +417,7 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
                             icon: Icons.star,
                             label: 'Featured',
                             value: '0', // Will be calculated from API data
-                            gradientColors: [AppColors.green500, AppColors.green600],
+                            gradientColors: [AppColors.primaryBlue, AppColors.darkBlue],
                           ),
                         ),
                       ],
@@ -493,13 +493,14 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
                         ),
                       )
                     else
-                      ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _filteredProducts.length + (_hasMore ? 1 : 0),
-                        separatorBuilder: (context, index) => const SizedBox(height: 16),
-                        itemBuilder: (context, index) {
-                          if (index == _filteredProducts.length) {
+                      RepaintBoundary(
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _filteredProducts.length + (_hasMore ? 1 : 0),
+                          separatorBuilder: (context, index) => const SizedBox(height: 16),
+                          itemBuilder: (context, index) {
+                            if (index == _filteredProducts.length) {
                             // Load more indicator
                             if (!_isLoading && !_isLoadingMore && !_loadMoreScheduled && _hasMore) {
                               // Mark as scheduled to prevent multiple calls during same build
@@ -544,20 +545,23 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
                           final imageUrls = product.imageUrls;
                           final imageUrl = imageUrls.isNotEmpty ? imageUrls.first : null;
                           
-                          return ProductCard(
-                            id: product.id.toString(),
-                            title: product.title,
-                            imageUrl: imageUrl ?? '',
-                            currentBid: (product.currentBid ?? product.startingBid ?? product.startingPrice).toInt(),
-                            totalBids: product.totalBids ?? 0,
-                            endTime: product.auctionEndTime ?? DateTime.now().add(const Duration(days: 7)),
-                            category: product.categoryName,
-                            onTap: () {
-                              context.go('/product-details/${product.id}');
-                            },
+                          return RepaintBoundary(
+                            child: ProductCard(
+                              id: product.id.toString(),
+                              title: product.title,
+                              imageUrl: imageUrl ?? '',
+                              currentBid: (product.currentBid ?? product.startingBid ?? product.startingPrice).toInt(),
+                              totalBids: product.totalBids ?? 0,
+                              endTime: product.auctionEndTime ?? DateTime.now().add(const Duration(days: 7)),
+                              category: product.categoryName,
+                              onTap: () {
+                                context.go('/product-details/${product.id}');
+                              },
+                            ),
                           );
                         },
                       ),
+                    ),
                   ],
                 ),
               ),
@@ -597,13 +601,13 @@ class _StatCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 24, color: Colors.white),
+          Icon(icon, size: 24, color: AppColors.cardWhite),
           const SizedBox(height: 8),
           Text(
             label,
             style: const TextStyle(
               fontSize: 10,
-              color: Colors.white,
+              color: AppColors.cardWhite,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -612,7 +616,7 @@ class _StatCard extends StatelessWidget {
             value,
             style: const TextStyle(
               fontSize: 18,
-              color: Colors.white,
+              color: AppColors.cardWhite,
               fontWeight: FontWeight.bold,
             ),
           ),

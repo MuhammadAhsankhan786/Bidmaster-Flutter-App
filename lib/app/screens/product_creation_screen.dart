@@ -681,7 +681,7 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
                     onPressed: _isLoading ? null : _createProduct,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.blue600,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.cardWhite,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(24),
                       ),
@@ -692,7 +692,7 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
                             height: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor: AlwaysStoppedAnimation<Color>(AppColors.cardWhite),
                             ),
                           )
                         : Text(isEditMode ? 'Update Listing' : 'Create Listing'),

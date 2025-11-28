@@ -255,7 +255,7 @@ class _SellerWinnerDetailsScreenState extends State<SellerWinnerDetailsScreen> {
                                         label: const Text('Contact Winner'),
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: AppColors.green600,
-                                          foregroundColor: Colors.white,
+                                          foregroundColor: AppColors.cardWhite,
                                         ),
                                       ),
                                     ),
@@ -337,4 +337,5 @@ class _InfoRow extends StatelessWidget {
     );
   }
 }
+
 

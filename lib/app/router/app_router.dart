@@ -122,8 +122,8 @@ class AppRouter {
         }
       }
 
-      // Buyer routes
-      if (location == '/buyer/bidding-history') {
+      // Buyer routes - My Bids
+      if (location == '/buyer/bidding-history' || location == '/buyer-bidding-history') {
         if (role != 'buyer') {
           return role == 'seller' ? '/seller-dashboard' : '/role-selection';
         }
@@ -221,6 +221,12 @@ class AppRouter {
         path: '/buyer/bidding-history',
         name: 'buyer-bidding-history',
         builder: (context, state) => const BuyerBiddingHistoryScreen(),
+      ),
+      // Alias route for /buyer-bidding-history (hyphen format)
+      GoRoute(
+        path: '/buyer-bidding-history',
+        name: 'buyer-bidding-history-alias',
+        redirect: (context, state) => '/buyer/bidding-history',
       ),
       GoRoute(
         path: '/seller/earnings',

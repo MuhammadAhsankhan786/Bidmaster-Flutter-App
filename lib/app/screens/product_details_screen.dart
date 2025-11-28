@@ -218,8 +218,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             margin: const EdgeInsets.symmetric(horizontal: 4),
                             decoration: BoxDecoration(
                               color: index == _currentImageIndex
-                                  ? Colors.white
-                                  : Colors.white.withOpacity(0.5),
+                                  ? AppColors.cardWhite
+                                  : AppColors.cardWhite.withOpacity(0.5),
                               borderRadius: BorderRadius.circular(4),
                             ),
                           ),
@@ -482,7 +482,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   icon: const Icon(Icons.person_outline),
                                   style: IconButton.styleFrom(
                                     backgroundColor:
-                                        isDark ? AppColors.slate700 : Colors.white,
+                                        isDark ? AppColors.slate700 : AppColors.cardWhite,
                                     shape: const CircleBorder(),
                                   ),
                                 ),
@@ -531,78 +531,88 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               ),
                             )
                           else
-                            ..._bids.map((bid) {
-                              final timeAgo = _formatTimeAgo(bid.createdAt);
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? AppColors.slate800
-                                      : AppColors.slate50,
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 32,
-                                      height: 32,
+                            RepaintBoundary(
+                              child: ListView.separated(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: _bids.length,
+                                separatorBuilder: (context, index) => const SizedBox(height: 8),
+                                itemBuilder: (context, index) {
+                                  final bid = _bids[index];
+                                  final timeAgo = _formatTimeAgo(bid.createdAt);
+                                  return RepaintBoundary(
+                                    child: Container(
+                                      padding: const EdgeInsets.all(12),
                                       decoration: BoxDecoration(
-                                        color: AppColors.blue100,
-                                        shape: BoxShape.circle,
+                                        color: isDark
+                                            ? AppColors.slate800
+                                            : AppColors.slate50,
+                                        borderRadius: BorderRadius.circular(16),
                                       ),
-                                      child: Center(
-                                        child: Text(
-                                          bid.bidderName?.substring(0, 1).toUpperCase() ?? 'B',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.blue600,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                      child: Row(
                                         children: [
-                                          Text(
-                                            bid.bidderName ?? 'Anonymous',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodySmall
-                                                ?.copyWith(
-                                                  fontWeight: FontWeight.w500,
+                                          Container(
+                                            width: 32,
+                                            height: 32,
+                                            decoration: const BoxDecoration(
+                                              color: AppColors.blue100,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Center(
+                                              child: Text(
+                                                bid.bidderName?.substring(0, 1).toUpperCase() ?? 'B',
+                                                style: const TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: AppColors.blue600,
                                                 ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  bid.bidderName ?? 'Anonymous',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodySmall
+                                                      ?.copyWith(
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
+                                                ),
+                                                Text(
+                                                  timeAgo,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodySmall
+                                                      ?.copyWith(
+                                                        color: isDark
+                                                            ? AppColors.textSecondaryDark
+                                                            : AppColors.textSecondaryLight,
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                           Text(
-                                            timeAgo,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodySmall
-                                                ?.copyWith(
-                                                  color: isDark
-                                                      ? AppColors.textSecondaryDark
-                                                      : AppColors.textSecondaryLight,
-                                                ),
+                                            '\$${_formatCurrency(bid.amount.toInt())}',
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.blue600,
+                                            ),
                                           ),
                                         ],
                                       ),
                                     ),
-                                    Text(
-                                      '\$${_formatCurrency(bid.amount.toInt())}',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.blue600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }).toList(),
+                                  );
+                                },
+                              ),
+                            ),
 
                           const SizedBox(height: 100), // Space for bottom button
                         ],
@@ -657,7 +667,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.blue600,
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.cardWhite,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24),
                 ),

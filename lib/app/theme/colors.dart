@@ -79,6 +79,19 @@ class AppColors {
   static const Color red900 = Color(0xFF7F1D1D);
   static const Color red950 = Color(0xFF450A0A);
 
+  // 🎨 Blue + White Marketplace Theme Colors
+  static const Color primaryBlue = Color(0xFF1E88E5);      // #1E88E5
+  static const Color darkBlue = Color(0xFF1565C0);        // #1565C0
+  static const Color lightBlue = Color(0xFF42A5F5);       // #42A5F5
+  static const Color cardWhite = Color(0xFFFFFFFF);        // #FFFFFF
+  static const Color textNavy = Color(0xFF0F172A);        // #0F172A
+  static const Color borderGrey = Color(0xFFE2E8F0);       // #E2E8F0
+
+  // Blue gradient colors for Blue+White theme
+  static const Color blueGradientStart = Color(0xFF1E88E5);  // primaryBlue
+  static const Color blueGradientEnd = Color(0xFF1565C0);     // darkBlue
+  static const Color blueGradientLight = Color(0xFF42A5F5);  // lightBlue
+
   // 🧩 Aliases for backward compatibility (from previous code)
   static const Color blue500 = blue600;
   static const Color yellow500 = yellow400;

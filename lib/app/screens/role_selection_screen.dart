@@ -102,7 +102,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                       : _handleContinue,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.blue600,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.cardWhite,
                     disabledBackgroundColor:
                         AppColors.blue600.withOpacity(0.5),
                     shape: RoundedRectangleBorder(
@@ -116,7 +116,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
+                                AlwaysStoppedAnimation<Color>(AppColors.cardWhite),
                           ),
                         )
                       : Row(
@@ -381,7 +381,7 @@ class _RoleCardState extends State<_RoleCard>
                             child: Icon(
                               widget.role.icon,
                               size: 32,
-                              color: Colors.white,
+                              color: AppColors.cardWhite,
                             ),
                           ),
                         ),
@@ -439,7 +439,7 @@ class _RoleCardState extends State<_RoleCard>
                         ? const Icon(
                             Icons.check,
                             size: 16,
-                            color: Colors.white,
+                            color: AppColors.cardWhite,
                           )
                         : null,
                   ),

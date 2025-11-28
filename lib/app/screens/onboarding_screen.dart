@@ -123,7 +123,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       onPressed: _handleNext,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.blue600,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.cardWhite,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(24),
@@ -194,7 +194,7 @@ class _OnboardingPage extends StatelessWidget {
                   child: Icon(
                     slide.icon,
                     size: 64,
-                    color: Colors.white,
+                    color: AppColors.cardWhite,
                   ),
                 ),
               );

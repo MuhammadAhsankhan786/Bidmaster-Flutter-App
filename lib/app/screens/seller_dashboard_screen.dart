@@ -33,7 +33,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         value: '\$${_formatCurrency(totalEarnings.toInt())}',
         change: pendingProducts > 0 ? '$pendingProducts pending' : 'All approved',
         icon: Icons.attach_money,
-        gradientColors: [AppColors.green500, AppColors.green600],
+        gradientColors: [AppColors.primaryBlue, AppColors.darkBlue],
       ),
       StatData(
         label: 'Active Listings',
@@ -47,7 +47,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         value: '$totalBids',
         change: 'Across all listings',
         icon: Icons.trending_up,
-        gradientColors: [AppColors.yellow500, AppColors.yellow600],
+        gradientColors: [AppColors.lightBlue, AppColors.primaryBlue],
       ),
     ];
   }
@@ -123,7 +123,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: isSelected ? Colors.white : AppColors.slate600,
+            color: isSelected ? AppColors.cardWhite : AppColors.slate600,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
           ),
         ),
@@ -211,7 +211,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                           });
                         },
                         backgroundColor: AppColors.blue600,
-                        child: const Icon(Icons.add, color: Colors.white),
+                        child: const Icon(Icons.add, color: AppColors.cardWhite),
                       ),
                     ],
                   ),
@@ -264,7 +264,8 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                         ),
                       )
                     else ...[
-                      ListView.separated(
+                      RepaintBoundary(
+                        child: ListView.separated(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: _stats.length,
@@ -272,9 +273,12 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                             const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final stat = _stats[index];
-                          return _StatCard(stat: stat);
+                          return RepaintBoundary(
+                            child: _StatCard(stat: stat),
+                          );
                         },
                       ),
+                    ),
 
                       const SizedBox(height: 24),
 
@@ -327,18 +331,20 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                           ),
                         )
                       else
-                        ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _filteredListings.length,
-                          separatorBuilder: (context, index) =>
-                              const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final product = _filteredListings[index];
-                            final imageUrls = product.imageUrls;
-                            final imageUrl = imageUrls.isNotEmpty ? imageUrls.first : null;
-                            
-                            return _ListingCard(
+                        RepaintBoundary(
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _filteredListings.length,
+                            separatorBuilder: (context, index) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (context, index) {
+                              final product = _filteredListings[index];
+                              final imageUrls = product.imageUrls;
+                              final imageUrl = imageUrls.isNotEmpty ? imageUrls.first : null;
+                              
+                              return RepaintBoundary(
+                                child: _ListingCard(
                               product: product,
                               imageUrl: imageUrl ?? '',
                               onTap: product.status == 'approved'
@@ -403,9 +409,11 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                                   }
                                 }
                               },
-                            );
-                          },
-                        ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                     ],
 
                     const SizedBox(height: 16),
@@ -512,7 +520,7 @@ class _StatCard extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(stat.icon, size: 24, color: Colors.white),
+            child: Icon(stat.icon, size: 24, color: AppColors.cardWhite),
           ),
         ],
       ),
@@ -700,7 +708,7 @@ class _ListingCard extends StatelessWidget {
                           label: const Text('View Winner'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.green600,
-                            foregroundColor: Colors.white,
+                            foregroundColor: AppColors.cardWhite,
                             padding: const EdgeInsets.symmetric(vertical: 8),
                           ),
                         ),
