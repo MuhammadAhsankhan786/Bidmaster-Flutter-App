@@ -34,27 +34,15 @@ class ApiService {
       return envUrl;
     }
     
+    // Default to live production URL for all builds
+    const String liveUrl = 'https://api.mazaadati.com/api';
+    
     if (kDebugMode) {
-      // Debug mode: use localhost for desktop, but warn for web/mobile
-      if (kIsWeb) {
-        // Web doesn't support localhost - need actual IP
-        print('⚠️ WARNING: Running on web. localhost will not work!');
-        print('   Please set API_BASE_URL using: --dart-define=API_BASE_URL=http://YOUR_IP:5000/api');
-        print('   Example: flutter run -d chrome --dart-define=API_BASE_URL=http://192.168.1.100:5000/api');
-        // Still return localhost but it will fail with clear error
-        return 'http://localhost:5000/api';
-      } else {
-        // Mobile: localhost won't work, need actual IP
-        print('⚠️ WARNING: Running on mobile. localhost will not work!');
-        print('   Please set API_BASE_URL using: --dart-define=API_BASE_URL=http://YOUR_IP:5000/api');
-        print('   Example: flutter run --dart-define=API_BASE_URL=http://192.168.1.100:5000/api');
-        // Still return localhost but it will fail with clear error
-        return 'http://localhost:5000/api';
-      }
-    } else {
-      // Release mode: API URL must be explicitly set
-      return 'API_BASE_URL_NOT_CONFIGURED';
+      print('🌐 Using live API URL: $liveUrl');
+      print('   To use local URL, set: --dart-define=API_BASE_URL=http://localhost:5000/api');
     }
+    
+    return liveUrl;
   }
   
   late Dio _dio;

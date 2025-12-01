@@ -9,9 +9,8 @@ class TokenRefreshInterceptor extends Interceptor {
   bool _isRefreshing = false;
   final List<_PendingRequest> _pendingRequests = [];
   // Base URL will be set dynamically via setBaseUrl() from ApiService
-  String _baseUrl = kDebugMode 
-      ? 'http://localhost:5000/api'
-      : 'http://YOUR_LOCAL_NETWORK_IPV4:5000/api';
+  // Default to live production URL
+  String _baseUrl = 'https://api.mazaadati.com/api';
 
   TokenRefreshInterceptor() : _refreshDio = Dio();
 
