@@ -96,6 +96,14 @@ class _BuyerBiddingHistoryScreenState extends State<BuyerBiddingHistoryScreen> {
             .toList();
         final analytics = response['analytics'] as Map<String, dynamic>?;
         final pagination = response['pagination'] as Map<String, dynamic>?;
+        
+        // Debug: Log analytics types to verify backend is sending numbers
+        if (kDebugMode && analytics != null) {
+          print('[Buyer Bids] Analytics received:');
+          analytics.forEach((key, value) {
+            print('  $key: $value (type: ${value.runtimeType})');
+          });
+        }
 
         if (kDebugMode) {
           print('[Buyer Bids] Processing response: newBids=${newBids.length}, loadMore=$loadMore');
@@ -164,6 +172,33 @@ class _BuyerBiddingHistoryScreenState extends State<BuyerBiddingHistoryScreen> {
       _selectedStatus = status;
     });
     _loadBiddingHistory();
+  }
+
+  // Safe conversion helper - handles both string and numeric values
+  double _safeToDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      // Remove any currency symbols or commas
+      final cleaned = value.replaceAll(RegExp(r'[^\d.-]'), '');
+      final parsed = double.tryParse(cleaned);
+      if (kDebugMode && parsed == null) {
+        print('[Buyer Bids] Warning: Could not parse string to double: "$value"');
+      }
+      return parsed ?? 0.0;
+    }
+    // Try to convert to string first, then parse
+    try {
+      final str = value.toString();
+      final cleaned = str.replaceAll(RegExp(r'[^\d.-]'), '');
+      return double.tryParse(cleaned) ?? 0.0;
+    } catch (e) {
+      if (kDebugMode) {
+        print('[Buyer Bids] Error converting to double: $value (${value.runtimeType})');
+      }
+      return 0.0;
+    }
   }
 
   String _formatCurrency(double amount) {
@@ -250,7 +285,7 @@ class _BuyerBiddingHistoryScreenState extends State<BuyerBiddingHistoryScreen> {
                   Expanded(
                     child: _StatCard(
                       label: 'Total Amount',
-                      value: '\$${_formatCurrency((_analytics?['total_amount_bid'] ?? 0.0).toDouble())}',
+                      value: '\$${_formatCurrency(_safeToDouble(_analytics?['total_amount_bid'] ?? 0.0))}',
                       color: AppColors.green600,
                     ),
                   ),
@@ -258,7 +293,7 @@ class _BuyerBiddingHistoryScreenState extends State<BuyerBiddingHistoryScreen> {
                   Expanded(
                     child: _StatCard(
                       label: 'Win Rate',
-                      value: '${(_analytics?['win_rate'] ?? 0.0).toStringAsFixed(1)}%',
+                      value: '${_safeToDouble(_analytics?['win_rate'] ?? 0.0).toStringAsFixed(1)}%',
                       color: AppColors.yellow600,
                     ),
                   ),
@@ -395,7 +430,7 @@ class _BuyerBiddingHistoryScreenState extends State<BuyerBiddingHistoryScreen> {
                                 final bid = _bids[index];
                                 final status = bid['bid_status'] ?? 'unknown';
                                 final productTitle = bid['product_title'] ?? 'Unknown Product';
-                                final amount = (bid['amount'] ?? 0.0).toDouble();
+                                final amount = _safeToDouble(bid['amount'] ?? 0.0);
                                 final bidDateStr = bid['bid_date'];
                                 final bidDate = bidDateStr != null && bidDateStr.toString().isNotEmpty
                                     ? DateTime.tryParse(bidDateStr.toString()) ?? DateTime(1970)
