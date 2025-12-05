@@ -34,14 +34,17 @@ class ApiService {
       return envUrl;
     }
     
-    // Default to live production URL for all builds
-    const String liveUrl = 'https://api.mazaadati.com/api';
-    
+    // Default to local URL in debug mode, production in release
     if (kDebugMode) {
-      print('🌐 Using live API URL: $liveUrl');
-      print('   To use local URL, set: --dart-define=API_BASE_URL=http://localhost:5000/api');
+      // Use local backend for development/testing
+      const String localUrl = 'http://localhost:5000/api';
+      print('🌐 Using LOCAL API URL: $localUrl');
+      print('   Make sure backend is running on http://localhost:5000');
+      return localUrl;
     }
     
+    // Production URL for release builds
+    const String liveUrl = 'https://api.mazaadati.com/api';
     return liveUrl;
   }
   
@@ -180,7 +183,7 @@ class ApiService {
       }
       
       // Extract role from response (backend returns role at top level and in user object)
-      final role = (response.data['role'] ?? response.data['user']?['role'] ?? 'buyer').toString().toLowerCase();
+      final role = (response.data['role'] ?? response.data['user']?['role'] ?? 'company_products').toString().toLowerCase();
       if (kDebugMode) {
         print('   Final role: $role');
       }
@@ -401,7 +404,7 @@ class ApiService {
       }
       
       // Extract role from response
-      final role = (response.data['role'] ?? response.data['user']?['role'] ?? 'buyer').toString().toLowerCase();
+      final role = (response.data['role'] ?? response.data['user']?['role'] ?? 'company_products').toString().toLowerCase();
       
       // Save tokens and user data
       final accessToken = response.data['accessToken'] ?? response.data['token'];
@@ -725,6 +728,17 @@ class ApiService {
       return UserModel.fromJson(response.data['data']);
     } catch (e) {
       print('❌ Error updating profile: $e');
+      
+      // Debug: Print error details
+      if (e is DioException && e.response != null) {
+        print('🔍 DEBUG: Error response status: ${e.response?.statusCode}');
+        print('🔍 DEBUG: Error response data: ${e.response?.data}');
+        final errorMessage = e.response?.data?['message'] ?? e.response?.data?['error'];
+        if (errorMessage != null) {
+          print('🔍 DEBUG: Backend error message: "$errorMessage"');
+        }
+      }
+      
       throw _handleError(e);
     }
   }

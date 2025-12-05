@@ -36,9 +36,11 @@ class _AuthScreenState extends State<AuthScreen> {
 
   static const int _maxOTPAttempts = 5;
 
+  // No hardcoded colors - using theme colors
+
   // Backend currently supports Iraq only - limiting to Iraq codes
   final List<CountryCode> _countryCodes = [
-    CountryCode(code: '+964', country: '🇮🇶 Iraq', maxLength: 12), // +964 + 9-10 digits
+    CountryCode(code: '+964', country: '🇮🇶 Iraq', maxLength: 10), // +964 is already shown, user enters 10 digits
   ];
 
   int get _maxPhoneLength {
@@ -49,10 +51,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
   bool get _isPhoneNumberValid {
     final phoneDigits = _phoneController.text.replaceAll(RegExp(r'[^\d]'), '');
-    if (_maxPhoneLength < 10) {
-      return phoneDigits.length == _maxPhoneLength;
-    }
-    return phoneDigits.length >= 10 && phoneDigits.length == _maxPhoneLength;
+    // User enters exactly 10 digits (since +964 is already shown)
+    return phoneDigits.length == 10;
   }
 
   void _validatePhoneNumber() {
@@ -122,7 +122,7 @@ class _AuthScreenState extends State<AuthScreen> {
         return;
       }
       
-      // Validate phone format (must start with +964 and have 9-10 digits after)
+      // Validate phone format (must start with +964 and have exactly 10 digits after)
       if (!normalizedPhone.startsWith('+964')) {
         _showError('Invalid Phone Number', 'Only Iraq (+964) numbers are allowed.');
         setState(() {
@@ -131,10 +131,10 @@ class _AuthScreenState extends State<AuthScreen> {
         return;
       }
       
-      // Validate phone length (Iraq format: +964 + 9-10 digits)
+      // Validate phone length (Iraq format: +964 + exactly 10 digits)
       final digitsAfterPrefix = normalizedPhone.substring(4); // Remove '+964'
-      if (digitsAfterPrefix.length < 9 || digitsAfterPrefix.length > 10) {
-        _showError('Invalid Phone Number', 'Phone number must be 9-10 digits after +964');
+      if (digitsAfterPrefix.length != 10) {
+        _showError('Invalid Phone Number', 'Phone number must be exactly 10 digits');
         setState(() {
           _isLoading = false;
         });
@@ -279,7 +279,7 @@ class _AuthScreenState extends State<AuthScreen> {
           }
           
           final user = response['user'];
-          final role = (response['role'] ?? user?['role'] ?? 'buyer').toString().toLowerCase();
+          final role = (response['role'] ?? user?['role'] ?? 'company_products').toString().toLowerCase();
           
           if (kDebugMode) {
             print('✅ OTP verified successfully - Login successful');
@@ -398,24 +398,9 @@ class _AuthScreenState extends State<AuthScreen> {
           }
           
           try {
-            if (userName == null || userEmail == null) {
-              // Profile incomplete - redirect to profile setup first
-              if (kDebugMode) {
-                print('🧭 Navigating to ProfileSetup (incomplete profile)');
-              }
-              if (mounted) {
-                context.go('/profile-setup', extra: {'role': role});
-                // ✅ CONFIRMATION: NAVIGATION ATTEMPTED
-                if (kDebugMode) {
-                  print('========================================');
-                  print('✅ NAVIGATION: ATTEMPTED');
-                  print('✅ Route: /profile-setup');
-                  print('✅ Status: SUCCESS');
-                  print('========================================');
-                }
-              }
-            } else {
-              // Profile complete - always show role selection to let user choose buyer/seller
+            // Skip profile setup - go directly to role selection
+            // Profile complete - always show role selection to let user choose company_products/seller_products
+            if (true) {
               if (kDebugMode) {
                 print('🧭 Navigating to RoleSelection (user can choose buyer or seller)');
               }
@@ -628,10 +613,12 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -646,24 +633,23 @@ class _AuthScreenState extends State<AuthScreen> {
                     width: 64,
                     height: 64,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [AppColors.blue600, AppColors.blue700],
-                      ),
-                      borderRadius: BorderRadius.circular(16),
+                      color: colorScheme.primary,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.gavel,
                       size: 32,
-                      color: AppColors.secondary,
+                      color: colorScheme.onPrimary,
                     ),
                   ),
                   const SizedBox(height: 24),
                   Text(
                     _currentStep == 0
-                        ? 'Welcome to BidMaster'
+                        ? 'Welcome to IQ BidMaster'
                         : 'Verify Your Phone',
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.bold,
+                          color: colorScheme.onSurface,
                         ),
                     textAlign: TextAlign.center,
                   ),
@@ -673,12 +659,36 @@ class _AuthScreenState extends State<AuthScreen> {
                         ? 'Enter your phone number to get started'
                         : 'We sent a code to $_selectedCountryCode ${_phoneController.text}',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: isDark
-                              ? AppColors.textSecondaryDark
-                              : AppColors.textSecondaryLight,
+                          color: colorScheme.onSurface.withOpacity(0.7),
                         ),
                     textAlign: TextAlign.center,
                   ),
+                  if (_currentStep == 0) ...[
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          "Don't have an account? ",
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onSurface.withOpacity(0.7),
+                              ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            context.push('/role-selection?mode=signup');
+                          },
+                          child: Text(
+                            'Sign Up',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
 
@@ -697,6 +707,9 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _buildPhoneStep(bool isDark) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -708,10 +721,10 @@ class _AuthScreenState extends State<AuthScreen> {
               width: 120,
               height: 56,
               decoration: BoxDecoration(
-                color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-                borderRadius: BorderRadius.circular(24),
+                color: colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isDark ? AppColors.slate700 : AppColors.slate200,
+                  color: colorScheme.onSurface.withOpacity(0.2),
                 ),
               ),
               child: DropdownButtonHideUnderline(
@@ -719,7 +732,8 @@ class _AuthScreenState extends State<AuthScreen> {
                   value: _selectedCountryCode,
                   isExpanded: true,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  icon: const Icon(Icons.arrow_drop_down, size: 20),
+                  icon: Icon(Icons.arrow_drop_down, size: 20, color: colorScheme.onSurface.withOpacity(0.7)),
+                  style: TextStyle(color: colorScheme.onSurface),
                   items: _countryCodes.map((country) {
                     return DropdownMenuItem<String>(
                       value: country.code,
@@ -727,9 +741,7 @@ class _AuthScreenState extends State<AuthScreen> {
                         '${country.country} ${country.code}',
                         style: TextStyle(
                           fontSize: 12,
-                          color: isDark
-                              ? AppColors.textPrimaryDark
-                              : AppColors.textPrimaryLight,
+                          color: colorScheme.onSurface,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -751,19 +763,28 @@ class _AuthScreenState extends State<AuthScreen> {
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(_maxPhoneLength),
                 ],
-                style: const TextStyle(
-                  fontSize: 18,
-                  letterSpacing: 2,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: colorScheme.onSurface,
                 ),
                 decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.phone, size: 20),
+                  labelText: 'Phone Number',
+                  labelStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+                  prefixIcon: Icon(Icons.phone, size: 20, color: colorScheme.onSurface.withOpacity(0.7)),
                   hintText: '9876543210',
                   filled: true,
-                  fillColor:
-                      isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                  fillColor: colorScheme.surface,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: colorScheme.onSurface.withOpacity(0.2)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: colorScheme.onSurface.withOpacity(0.2)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: colorScheme.primary, width: 2),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 20,
@@ -781,7 +802,9 @@ class _AuthScreenState extends State<AuthScreen> {
 
         Text(
           "OTP will be sent to your phone via SMS",
-          style: Theme.of(context).textTheme.bodySmall,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurface.withOpacity(0.7),
+              ),
         ),
 
         const SizedBox(height: 16),
@@ -795,20 +818,28 @@ class _AuthScreenState extends State<AuthScreen> {
             FilteringTextInputFormatter.allow(RegExp(r'[A-Z0-9]')),
             LengthLimitingTextInputFormatter(6),
           ],
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 16,
-            letterSpacing: 1,
+            color: colorScheme.onSurface,
           ),
           decoration: InputDecoration(
-            prefixIcon: const Icon(Icons.card_giftcard, size: 20),
-            hintText: 'Enter referral code',
             labelText: 'Referral Code (Optional)',
+            labelStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
+            prefixIcon: Icon(Icons.card_giftcard, size: 20, color: colorScheme.onSurface.withOpacity(0.7)),
+            hintText: 'Enter referral code',
             filled: true,
-            fillColor:
-                isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+            fillColor: colorScheme.surface,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(24),
-              borderSide: BorderSide.none,
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: colorScheme.onSurface.withOpacity(0.2)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: colorScheme.onSurface.withOpacity(0.2)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: colorScheme.primary, width: 2),
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 20,
@@ -827,19 +858,20 @@ class _AuthScreenState extends State<AuthScreen> {
                 ? null
                 : _handlePhoneSubmit,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.blue600,
-              foregroundColor: AppColors.cardWhite,
+              backgroundColor: colorScheme.primary,
+              foregroundColor: colorScheme.onPrimary,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(12),
               ),
+              elevation: 0,
             ),
             child: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.cardWhite),
+                      valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onPrimary),
                     ),
                   )
                 : const Text('Send OTP'),
@@ -851,6 +883,9 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _buildOTPStep(bool isDark) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -898,24 +933,23 @@ class _AuthScreenState extends State<AuthScreen> {
                 decoration: InputDecoration(
                   counterText: '',
                   filled: true,
-                  fillColor:
-                      isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                  fillColor: Theme.of(context).colorScheme.surface,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide(
-                      color: isDark ? AppColors.slate700 : AppColors.slate200,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2),
                     ),
                   ),
                   enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide(
-                      color: isDark ? AppColors.slate700 : AppColors.slate200,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2),
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(
-                      color: AppColors.blue600,
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.primary,
                       width: 2,
                     ),
                   ),
@@ -968,19 +1002,20 @@ class _AuthScreenState extends State<AuthScreen> {
                 ? null
                 : _handleOTPVerify,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.blue600,
-              foregroundColor: AppColors.cardWhite,
+              backgroundColor: colorScheme.primary,
+              foregroundColor: colorScheme.onPrimary,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(12),
               ),
+              elevation: 0,
             ),
             child: _isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.cardWhite),
+                      valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onPrimary),
                     ),
                   )
                 : const Text('Verify & Continue'),
@@ -993,13 +1028,13 @@ class _AuthScreenState extends State<AuthScreen> {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppColors.blue50,
-            borderRadius: BorderRadius.circular(24),
+            color: colorScheme.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
             '🔒 Your phone number is secure and will never be shared with third parties',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.blue700,
+                  color: colorScheme.primary,
                 ),
             textAlign: TextAlign.center,
           ),

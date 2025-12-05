@@ -36,9 +36,9 @@ class RoleToggleCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        (userRole == 'seller') ? 'Seller' : (userRole == 'buyer' ? 'Buyer' : 'Not Set'),
+                        (userRole == 'seller_products') ? 'Seller Products' : (userRole == 'company_products' ? 'Company Products' : 'Not Set'),
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              color: userRole == 'seller' 
+                              color: userRole == 'seller_products' 
                                   ? AppColors.warning 
                                   : AppColors.primaryBlue,
                               fontWeight: FontWeight.w600,
@@ -55,14 +55,14 @@ class RoleToggleCard extends StatelessWidget {
                   )
                 else
                   Switch(
-                    value: userRole == 'seller',
+                    value: userRole == 'seller_products',
                     onChanged: onRoleChanged,
                   ),
               ],
             ),
             const SizedBox(height: 8),
             Text(
-              'Switch between Buyer and Seller roles',
+              'Switch between Company Products and Seller Products roles',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: AppColors.slate500,
                   ),

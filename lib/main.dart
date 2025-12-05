@@ -8,6 +8,7 @@ import 'app/theme/theme.dart';
 import 'app/services/storage_service.dart';
 import 'app/services/referral_service.dart';
 import 'app/services/theme_service.dart';
+import 'app/services/language_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -91,9 +92,7 @@ void _initDeepLinks() {
 
   // Handle links while app is running
   appLinks.uriLinkStream.listen((Uri uri) {
-    if (uri != null) {
-      ReferralService.handleDeepLink(uri.toString());
-    }
+    ReferralService.handleDeepLink(uri.toString());
   }, onError: (err) {
     if (kDebugMode) {
       print('❌ Error listening to links: $err');
@@ -114,15 +113,22 @@ class _MyAppState extends State<MyApp> {
     super.initState();
     // Listen to theme changes
     ThemeService.themeNotifier.addListener(_onThemeChanged);
+    // Listen to language changes
+    LanguageService.languageNotifier.addListener(_onLanguageChanged);
   }
 
   @override
   void dispose() {
     ThemeService.themeNotifier.removeListener(_onThemeChanged);
+    LanguageService.languageNotifier.removeListener(_onLanguageChanged);
     super.dispose();
   }
 
   void _onThemeChanged() {
+    setState(() {});
+  }
+
+  void _onLanguageChanged() {
     setState(() {});
   }
 
@@ -131,12 +137,27 @@ class _MyAppState extends State<MyApp> {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: ThemeService.themeNotifier,
       builder: (context, themeMode, child) {
-        return MaterialApp.router(
-          title: 'BidMaster',
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
-          themeMode: themeMode,
-          routerConfig: AppRouter.router,
+        return ValueListenableBuilder<Locale>(
+          valueListenable: LanguageService.languageNotifier,
+          builder: (context, locale, child) {
+            return MaterialApp.router(
+              title: 'IQ BidMaster',
+              theme: AppTheme.lightTheme,
+              darkTheme: AppTheme.darkTheme,
+              themeMode: themeMode,
+              locale: locale,
+              supportedLocales: const [
+                Locale('en', 'US'), // English
+                Locale('ar', 'IQ'), // Arabic
+                Locale('ku', 'IQ'), // Kurdish
+              ],
+              localizationsDelegates: const [
+                DefaultMaterialLocalizations.delegate,
+                DefaultWidgetsLocalizations.delegate,
+              ],
+              routerConfig: AppRouter.router,
+            );
+          },
         );
       },
     );

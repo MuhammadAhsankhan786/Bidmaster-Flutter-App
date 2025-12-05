@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
 import '../services/api_service.dart';
@@ -41,6 +42,9 @@ class _WalletScreenState extends State<WalletScreen> {
         });
       }
     } catch (e) {
+      if (kDebugMode) {
+        print('[Wallet] Error loading wallet data: $e');
+      }
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;

@@ -5,6 +5,7 @@ import '../widgets/countdown_timer.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import '../models/product_model.dart';
+import '../utils/image_url_helper.dart';
 
 class SellerDashboardScreen extends StatefulWidget {
   const SellerDashboardScreen({super.key});
@@ -572,7 +573,7 @@ class _ListingCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
                 child: imageUrl.isNotEmpty
                     ? Image.network(
-                        imageUrl,
+                        ImageUrlHelper.fixImageUrl(imageUrl),
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
                           return const Icon(Icons.image, size: 32);

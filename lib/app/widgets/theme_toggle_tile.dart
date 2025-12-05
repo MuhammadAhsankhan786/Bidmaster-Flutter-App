@@ -6,26 +6,24 @@ class ThemeToggleTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: ValueListenableBuilder<ThemeMode>(
-        valueListenable: ThemeService.themeNotifier,
-        builder: (context, themeMode, child) {
-          final isDark = themeMode == ThemeMode.dark;
-          return SwitchListTile(
-            secondary: Icon(
-              Icons.brightness_6,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            title: const Text('Dark Mode'),
-            subtitle: const Text('Switch between Light and Dark themes'),
-            value: isDark,
-            onChanged: (bool value) {
-              final brightness = value ? Brightness.dark : Brightness.light;
-              ThemeService.setThemeMode(brightness);
-            },
-          );
-        },
-      ),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeService.themeNotifier,
+      builder: (context, themeMode, child) {
+        final isDark = themeMode == ThemeMode.dark;
+        return SwitchListTile(
+          secondary: Icon(
+            isDark ? Icons.dark_mode : Icons.light_mode,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          title: const Text('Dark Mode'),
+          subtitle: Text(isDark ? 'Dark theme is enabled' : 'Light theme is enabled'),
+          value: isDark,
+          onChanged: (bool value) {
+            final brightness = value ? Brightness.dark : Brightness.light;
+            ThemeService.setThemeMode(brightness);
+          },
+        );
+      },
     );
   }
 }

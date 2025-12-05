@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import '../theme/colors.dart';
 
 enum CountdownSize { small, medium, large }
 
@@ -53,23 +52,19 @@ class _CountdownTimerState extends State<CountdownTimer> {
     }
   }
 
+  // BarezBid Color Palette
+  static const Color _timerColor = Color(0xFFFF5555);
+  static const Color _timerBg = Color(0xFFFF5555);
+  static const Color _timerText = Color(0xFFFFFFFF);
+
   Color _getColor() {
-    final totalHours = _remaining.inHours;
-    if (totalHours < 1) return AppColors.red500;
-    if (totalHours < 24) return AppColors.yellow600;
-    return AppColors.green600;
+    // Always use BarezBid timer color
+    return _timerText; // White text on red background
   }
 
   Color _getBackgroundColor(BuildContext context) {
-    final totalHours = _remaining.inHours;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    if (totalHours < 1) {
-      return isDark ? AppColors.red950 : AppColors.red50;
-    }
-    if (totalHours < 24) {
-      return isDark ? AppColors.yellow950 : AppColors.yellow50;
-    }
-    return isDark ? AppColors.green950 : AppColors.green50;
+    // Always use red background for timer
+    return _timerBg;
   }
 
   double _getFontSize() {
@@ -100,21 +95,20 @@ class _CountdownTimerState extends State<CountdownTimer> {
       return Container(
         padding: EdgeInsets.all(_getPadding()),
         decoration: BoxDecoration(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? AppColors.slate800
-              : AppColors.slate100,
-          borderRadius: BorderRadius.circular(20),
+          color: _timerBg,
+          borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.access_time, size: 12, color: AppColors.slate500),
+            Icon(Icons.access_time, size: 12, color: _timerText),
             const SizedBox(width: 4),
             Text(
               'Ended',
               style: TextStyle(
                 fontSize: _getFontSize(),
-                color: AppColors.slate500,
+                color: _timerText,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -133,7 +127,7 @@ class _CountdownTimerState extends State<CountdownTimer> {
       ),
       decoration: BoxDecoration(
         color: _getBackgroundColor(context),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

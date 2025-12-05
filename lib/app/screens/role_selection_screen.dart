@@ -16,30 +16,40 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
     with SingleTickerProviderStateMixin {
   String? _selectedRole;
   bool _isNavigating = false;
+  bool _isSignupMode = false; // Check if this is signup flow
+
+  // No hardcoded colors - using theme colors
+  // Note: iconColor will be set dynamically in _RoleCard based on theme
 
   final List<RoleOption> _roles = [
     RoleOption(
-      id: 'buyer',
-      title: 'I want to Buy',
-      description: 'Browse and bid on amazing items from sellers worldwide',
-      icon: Icons.shopping_bag,
-      gradientColors: [AppColors.blue500, AppColors.blue600],
+      id: 'company_products',
+      title: 'Company products',
+      description: '',
+      icon: Icons.inventory_2_outlined,
+      iconColor: null, // Will be set from theme
     ),
     RoleOption(
-      id: 'seller',
-      title: 'I want to Sell',
-      description: 'List your items and reach thousands of potential buyers',
-      icon: Icons.store,
-      gradientColors: [AppColors.yellow500, AppColors.yellow600],
+      id: 'seller_products',
+      title: 'Sellers products',
+      description: '',
+      icon: Icons.store_outlined,
+      iconColor: null, // Will be set from theme
     ),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    
+    // Check if this is signup mode from route parameters
+    final uri = GoRouterState.of(context).uri;
+    _isSignupMode = uri.queryParameters['mode'] == 'signup';
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -49,19 +59,10 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
 
               // Header
               Text(
-                'How will you use BidMaster?',
+                'Type of product',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
-                    ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Select your primary role to get started',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
+                      color: colorScheme.onSurface,
                     ),
                 textAlign: TextAlign.center,
               ),
@@ -85,6 +86,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                               _selectedRole = role.id;
                             });
                           },
+                          colorScheme: colorScheme,
                         ),
                       );
                     }).toList(),
@@ -101,22 +103,23 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                       ? null
                       : _handleContinue,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.blue600,
-                    foregroundColor: AppColors.cardWhite,
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
                     disabledBackgroundColor:
-                        AppColors.blue600.withOpacity(0.5),
+                        colorScheme.primary.withOpacity(0.5),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    elevation: 0,
                   ),
                   child: _isNavigating
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(AppColors.cardWhite),
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(colorScheme.onPrimary),
                           ),
                         )
                       : Row(
@@ -130,18 +133,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                 ),
               ),
 
-              const SizedBox(height: 24),
-
-              // Footer Text
-              Text(
-                'You can switch roles anytime in your profile settings',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                    ),
-                textAlign: TextAlign.center,
-              ),
             ],
           ),
         ),
@@ -151,6 +142,18 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
 
   Future<void> _handleContinue() async {
     if (_selectedRole == null || _isNavigating) return;
+
+    // Check if this is signup mode from route parameters
+    final uri = GoRouterState.of(context).uri;
+    final isSignupMode = uri.queryParameters['mode'] == 'signup';
+
+    // If signup mode, navigate to signup form
+    if (isSignupMode) {
+      if (mounted) {
+        context.push('/signup?role=$_selectedRole');
+      }
+      return;
+    }
 
     setState(() {
       _isNavigating = true;
@@ -248,12 +251,14 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
       await Future.delayed(const Duration(milliseconds: 300));
 
       if (mounted) {
-        print('   Navigating to /profile-setup with role: $_selectedRole');
+        print('   Navigating to dashboard with role: $_selectedRole');
         try {
-          context.go(
-            '/profile-setup',
-            extra: {'role': _selectedRole},
-          );
+          // Skip profile-setup, go directly to dashboard based on role
+          if (_selectedRole == 'company_products') {
+            context.go('/home');
+          } else if (_selectedRole == 'seller_products') {
+            context.go('/seller-dashboard');
+          }
           print('✅ Navigation successful');
         } catch (e) {
           print('❌ Navigation error: $e');
@@ -283,11 +288,13 @@ class _RoleCard extends StatefulWidget {
   final RoleOption role;
   final bool isSelected;
   final VoidCallback onTap;
+  final ColorScheme colorScheme;
 
   const _RoleCard({
     required this.role,
     required this.isSelected,
     required this.onTap,
+    required this.colorScheme,
   });
 
   @override
@@ -338,110 +345,56 @@ class _RoleCardState extends State<_RoleCard>
         builder: (context, child) {
           return Transform.scale(
             scale: _scaleAnimation.value,
-            child: Container(
-              padding: const EdgeInsets.all(24),
+              child: Container(
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: widget.isSelected
-                    ? (isDark ? AppColors.blue950 : AppColors.blue50)
-                    : (isDark ? AppColors.surfaceDark : AppColors.surfaceLight),
-                borderRadius: BorderRadius.circular(24),
+                color: widget.colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: widget.isSelected
-                      ? AppColors.blue600
-                      : (isDark ? AppColors.slate800 : AppColors.slate200),
-                  width: 2,
+                      ? widget.colorScheme.primary
+                      : widget.colorScheme.onSurface.withOpacity(0.2),
+                  width: widget.isSelected ? 2 : 1,
                 ),
+                boxShadow: widget.isSelected
+                    ? [
+                        BoxShadow(
+                          color: widget.colorScheme.primary.withOpacity(0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : null,
               ),
               child: Row(
                 children: [
                   // Icon Container
-                  TweenAnimationBuilder<double>(
-                    tween: Tween(
-                      begin: 1.0,
-                      end: widget.isSelected ? 1.1 : 1.0,
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOut,
-                    builder: (context, scale, child) {
-                      return Transform.scale(
-                        scale: scale,
-                        child: Transform.rotate(
-                          angle: widget.isSelected ? 0.087 : 0.0, // ~5 degrees
-                          child: Container(
-                            width: 64,
-                            height: 64,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: widget.role.gradientColors,
-                              ),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Icon(
-                              widget.role.icon,
-                              size: 32,
-                              color: AppColors.cardWhite,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
+                    child: Icon(
+                      widget.role.icon,
+                      size: 32,
+                      color: widget.isSelected ? widget.colorScheme.primary : widget.colorScheme.onSurface.withOpacity(0.6),
+                    ),
                   ),
 
                   const SizedBox(width: 16),
 
                   // Text Content
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.role.title,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                color: widget.isSelected
-                                    ? AppColors.blue600
-                                    : null,
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          widget.role.description,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: isDark
-                                    ? AppColors.textSecondaryDark
-                                    : AppColors.textSecondaryLight,
-                              ),
-                        ),
-                      ],
+                    child: Text(
+                      widget.role.title,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: widget.isSelected ? widget.colorScheme.primary : widget.colorScheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
                     ),
-                  ),
-
-                  const SizedBox(width: 12),
-
-                  // Selection Indicator
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: widget.isSelected
-                            ? AppColors.blue600
-                            : (isDark ? AppColors.slate600 : AppColors.slate300),
-                        width: 2,
-                      ),
-                      color: widget.isSelected ? AppColors.blue600 : Colors.transparent,
-                    ),
-                    child: widget.isSelected
-                        ? const Icon(
-                            Icons.check,
-                            size: 16,
-                            color: AppColors.cardWhite,
-                          )
-                        : null,
                   ),
                 ],
               ),
@@ -458,14 +411,14 @@ class RoleOption {
   final String title;
   final String description;
   final IconData icon;
-  final List<Color> gradientColors;
+  final Color? iconColor; // Now nullable since we use theme colors
 
   RoleOption({
     required this.id,
     required this.title,
     required this.description,
     required this.icon,
-    required this.gradientColors,
+    this.iconColor, // Now optional
   });
 }
 

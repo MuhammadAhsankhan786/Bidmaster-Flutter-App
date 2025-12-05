@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../utils/image_url_helper.dart';
 
 class ProductModel {
   final int id;
@@ -144,20 +145,34 @@ class ProductModel {
     };
   }
 
-  // Helper method to get image URLs as list
+  // Helper method to get image URLs as list (with fixed URLs)
   List<String> get imageUrls {
-    if (imageUrl == null) return [];
+    if (imageUrl == null || imageUrl!.isEmpty) {
+      return [];
+    }
+    
     try {
       // Try to parse as JSON array
       final parsed = jsonDecode(imageUrl!);
       if (parsed is List) {
-        return parsed.map((e) => e.toString()).toList();
+        final urls = parsed.map((e) => e.toString()).where((url) => url.isNotEmpty).toList();
+        // Fix all URLs (convert relative to full URLs)
+        return ImageUrlHelper.fixImageUrls(urls).where((url) => url.isNotEmpty).toList();
       }
     } catch (e) {
       // If not JSON, treat as single URL string
-      return [imageUrl!];
+      final url = imageUrl!.trim();
+      if (url.isEmpty) return [];
+      // Fix URL (convert relative to full URL)
+      final fixedUrl = ImageUrlHelper.fixImageUrl(url);
+      return fixedUrl.isEmpty ? [] : [fixedUrl];
     }
-    return [imageUrl!];
+    
+    // Fallback: treat as single URL string
+    final url = imageUrl!.trim();
+    if (url.isEmpty) return [];
+    final fixedUrl = ImageUrlHelper.fixImageUrl(url);
+    return fixedUrl.isEmpty ? [] : [fixedUrl];
   }
 }
 

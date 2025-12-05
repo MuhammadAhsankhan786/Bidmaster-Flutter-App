@@ -229,7 +229,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       }
       
       // Navigate based on role
-      if (widget.userRole == 'buyer') {
+      if (widget.userRole == 'company_products') {
         print('🧭 Navigating to /home for buyer role');
         context.go('/home');
       } else {
@@ -268,7 +268,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
               children: [
                 // Header
                 Text(
-                  widget.userRole == 'seller'
+                  widget.userRole == 'seller_products'
                       ? 'Build trust with your buyers'
                       : 'Personalize your experience',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
@@ -486,7 +486,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   maxLines: 3,
                   decoration: InputDecoration(
                     labelText: 'Bio (Optional)',
-                    hintText: widget.userRole == 'seller'
+                    hintText: widget.userRole == 'seller_products'
                         ? 'Tell buyers about your store and products...'
                         : 'Tell us about yourself...',
                     filled: true,

@@ -1,11 +1,11 @@
 import 'package:go_router/go_router.dart';
 import 'package:flutter/foundation.dart';
 import '../screens/splash_screen.dart';
-import '../screens/onboarding_screen.dart';
 import '../screens/auth_screen.dart';
 import '../screens/role_selection_screen.dart';
-import '../screens/profile_setup_screen.dart';
+import '../screens/signup_screen.dart';
 import '../screens/buyer_dashboard_screen.dart';
+import '../screens/home_screen.dart';
 import '../screens/product_details_screen.dart';
 import '../screens/seller_dashboard_screen.dart';
 import '../screens/notifications_screen.dart';
@@ -27,25 +27,38 @@ class AppRouter {
       final isLoggedIn = await StorageService.isLoggedIn();
       final location = state.uri.path;
 
-      // Public routes - no auth required
-      if (location == '/splash' || location == '/onboarding' || location == '/auth') {
+      // Public routes - no auth required (users can browse)
+      if (location == '/splash' || location == '/auth') {
         return null;
       }
 
-      // Role selection and profile setup - accessible after OTP verification
-      // Allow these routes if user has phone/role saved (even if tokens are temporarily cleared)
-      if (location == '/role-selection' || location == '/profile-setup') {
+      // Public browsing routes - home and product details (no login required)
+      if (location == '/home' || location.startsWith('/product-details')) {
+        return null; // Allow public access to browse
+      }
+
+      // Signup route - public access (for new user registration)
+      if (location == '/signup') {
+        return null; // Allow public access to signup
+      }
+
+      // Role selection - accessible for signup flow or after OTP verification
+      if (location == '/role-selection') {
+        // Allow if it's signup mode (mode=signup query parameter)
+        final uri = state.uri;
+        if (uri.queryParameters['mode'] == 'signup') {
+          return null; // Allow signup flow
+        }
         // Check if user has phone or role saved (indicates they've logged in before)
         final phone = await StorageService.getUserPhone();
         final role = await StorageService.getUserRole();
         if (phone == null && !isLoggedIn) {
           return '/auth';
         }
-        return null; // Allow navigation to role-selection and profile-setup
+        return null; // Allow navigation to role-selection
       }
 
-      // Protected routes - require authentication OR saved user data
-      // This allows navigation after profile setup even if tokens are temporarily cleared
+      // Protected routes - require authentication
       final savedPhone = await StorageService.getUserPhone();
       final savedRole = await StorageService.getUserRole();
       if (!isLoggedIn && savedPhone == null && savedRole == null) {
@@ -62,77 +75,56 @@ class AppRouter {
       }
       
       // Allow admin roles (superadmin, moderator, viewer) to access role-selection
-      // They might want to switch to buyer/seller role
       if (role == 'superadmin' || role == 'moderator' || role == 'viewer') {
-        // Allow access to role-selection and profile-setup
-        if (location == '/role-selection' || location == '/profile-setup') {
+        if (location == '/role-selection') {
           return null;
         }
-        // For admin roles trying to access buyer/seller routes, redirect to role-selection
+        // For admin roles trying to access company_products/seller_products routes, redirect to role-selection
         if (location.startsWith('/home') || location.startsWith('/seller-dashboard')) {
           return '/role-selection';
         }
       }
 
-      // Buyer routes
-      if (location.startsWith('/home') || location.startsWith('/product-details')) {
-        // Allow navigation if role is buyer OR if role is null but we're coming from profile setup
-        // This handles the case where role was just updated but router checks before storage syncs
-        if (role != 'buyer') {
-          // If role is null, check if we have phone (user just completed profile setup)
-          if (role == null && savedPhone != null) {
-            // User just completed profile setup - allow navigation temporarily
-            // The role will be set correctly on next navigation
-            if (kDebugMode) {
-              print('⚠️ Router: Role is null but phone exists - allowing buyer navigation');
-            }
-            return null; // Allow navigation
-          }
-          // Redirect to appropriate dashboard
-          return role == 'seller' ? '/seller-dashboard' : '/role-selection';
-        }
-      }
-
-      // Seller routes
+      // Seller Products routes
       if (location.startsWith('/seller-dashboard') || location == '/product-create') {
-        if (role != 'seller') {
+        if (role != 'seller_products') {
           // Redirect to appropriate dashboard
-          return role == 'buyer' ? '/home' : '/role-selection';
+          return role == 'company_products' ? '/home' : '/role-selection';
         }
       }
 
-      // Notifications - accessible to both buyer and seller
+      // Notifications - accessible to both company_products and seller_products
       if (location == '/notifications') {
-        if (role != 'buyer' && role != 'seller') {
+        if (role != 'company_products' && role != 'seller_products') {
           return '/auth';
         }
       }
 
-      // Wallet - accessible to both buyer and seller
+      // Wallet - accessible to both company_products and seller_products
       if (location == '/wallet') {
-        if (role != 'buyer' && role != 'seller') {
+        if (role != 'company_products' && role != 'seller_products') {
           return '/auth';
         }
       }
 
-      // Profile - accessible to both buyer and seller
+      // Profile - accessible to both company_products and seller_products
       if (location == '/profile') {
-        if (role != 'buyer' && role != 'seller') {
+        if (role != 'company_products' && role != 'seller_products') {
           return '/auth';
         }
       }
 
-      // Buyer routes - My Bids
+      // Company Products routes - My Bids
       if (location == '/buyer/bidding-history' || location == '/buyer-bidding-history') {
-        if (role != 'buyer') {
-          return role == 'seller' ? '/seller-dashboard' : '/role-selection';
+        if (role != 'company_products') {
+          return role == 'seller_products' ? '/seller-dashboard' : '/role-selection';
         }
       }
 
-      // Seller routes
+      // Seller Products routes
       if (location == '/seller/earnings' || location.startsWith('/seller/winner/')) {
-        if (role != 'seller') {
-          return role == 'buyer' ? '/home' : '/role-selection';
+        if (role != 'seller_products') {
+          return role == 'company_products' ? '/home' : '/role-selection';
         }
       }
 
@@ -145,11 +137,6 @@ class AppRouter {
         builder: (context, state) => const SplashScreen(),
       ),
       GoRoute(
-        path: '/onboarding',
-        name: 'onboarding',
-        builder: (context, state) => const OnboardingScreen(),
-      ),
-      GoRoute(
         path: '/auth',
         name: 'auth',
         builder: (context, state) => const AuthScreen(),
@@ -160,17 +147,17 @@ class AppRouter {
         builder: (context, state) => const RoleSelectionScreen(),
       ),
       GoRoute(
-        path: '/profile-setup',
-        name: 'profile-setup',
+        path: '/signup',
+        name: 'signup',
         builder: (context, state) {
-          final args = state.extra as Map<String, dynamic>?;
-          return ProfileSetupScreen(userRole: args?['role'] as String? ?? 'buyer');
+          final role = state.uri.queryParameters['role'];
+          return SignupScreen(selectedRole: role);
         },
       ),
       GoRoute(
         path: '/home',
         name: 'home',
-        builder: (context, state) => const BuyerDashboardScreen(),
+        builder: (context, state) => HomeScreen(),
       ),
       GoRoute(
         path: '/product-details/:id',

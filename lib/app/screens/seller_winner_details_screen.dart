@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
 import '../services/api_service.dart';
+import '../utils/image_url_helper.dart';
 
 class SellerWinnerDetailsScreen extends StatefulWidget {
   final String productId;
@@ -138,7 +139,7 @@ class _SellerWinnerDetailsScreenState extends State<SellerWinnerDetailsScreen> {
                                     ClipRRect(
                                       borderRadius: BorderRadius.circular(12),
                                       child: Image.network(
-                                        _winnerData!['product']?['image_url'],
+                                        ImageUrlHelper.fixImageUrl(_winnerData!['product']?['image_url']),
                                         height: 200,
                                         width: double.infinity,
                                         fit: BoxFit.cover,

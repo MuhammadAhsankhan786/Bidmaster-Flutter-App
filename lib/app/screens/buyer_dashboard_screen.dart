@@ -389,40 +389,6 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
                       ),
                     ),
 
-                    const SizedBox(height: 16),
-
-                    // Stats Cards - Values will be calculated from actual data
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _StatCard(
-                            icon: Icons.trending_up,
-                            label: 'Trending',
-                            value: '0', // Will be calculated from API data
-                            gradientColors: [AppColors.blue500, AppColors.blue600],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _StatCard(
-                            icon: Icons.access_time,
-                            label: 'Ending Soon',
-                            value: '0', // Will be calculated from API data
-                            gradientColors: [AppColors.lightBlue, AppColors.primaryBlue],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _StatCard(
-                            icon: Icons.star,
-                            label: 'Featured',
-                            value: '0', // Will be calculated from API data
-                            gradientColors: [AppColors.primaryBlue, AppColors.darkBlue],
-                          ),
-                        ),
-                      ],
-                    ),
-
                     const SizedBox(height: 24),
 
                     // Products Grid

@@ -24,10 +24,10 @@ class RoleGuard {
 
     final role = await StorageService.getUserRole();
     switch (role) {
-      case 'buyer':
+      case 'company_products':
         context.go('/home');
         break;
-      case 'seller':
+      case 'seller_products':
         context.go('/seller-dashboard');
         break;
       case 'admin':
@@ -48,14 +48,14 @@ class RoleGuard {
 
     final role = await StorageService.getUserRole();
 
-    // Buyer routes
+    // Company Products routes
     if (route.startsWith('/home') || route.startsWith('/product-details')) {
-      return role == 'buyer';
+      return role == 'company_products';
     }
 
-    // Seller routes
+    // Seller Products routes
     if (route.startsWith('/seller-dashboard')) {
-      return role == 'seller';
+      return role == 'seller_products';
     }
 
     // Public routes
@@ -63,8 +63,8 @@ class RoleGuard {
       return true;
     }
 
-    // Profile setup - accessible after role selection
-    if (route == '/profile-setup' || route == '/role-selection') {
+    // Role selection - accessible after login
+    if (route == '/role-selection') {
       return true;
     }
 

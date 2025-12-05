@@ -8,6 +8,7 @@ import '../theme/colors.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import '../models/product_model.dart';
+import '../utils/image_url_helper.dart';
 
 class ProductCreationScreen extends StatefulWidget {
   final ProductModel? productToEdit;
@@ -188,7 +189,7 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
 
     // Check user role before attempting to create/update product
     final userRole = await StorageService.getUserRole();
-    if (userRole != 'seller') {
+    if (userRole != 'seller_products') {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -518,7 +519,7 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(12),
                             child: Image.network(
-                              _existingImageUrl!,
+                              ImageUrlHelper.fixImageUrl(_existingImageUrl!),
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) {
                                 return Container(

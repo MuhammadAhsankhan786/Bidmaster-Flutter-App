@@ -71,13 +71,13 @@ class _SplashScreenState extends State<SplashScreen>
             // User is logged in - router will handle role-based redirect
             await RoleGuard.navigateByRole(context);
           } else {
-            // No session - go to onboarding
-            context.go('/onboarding');
+            // No session - go to home (public browsing)
+            context.go('/home');
           }
         } catch (e) {
-          // If there's an error, go to onboarding as fallback
+          // If there's an error, go to auth as fallback
           if (mounted) {
-            context.go('/onboarding');
+            context.go('/auth');
           }
         }
       }
@@ -90,106 +90,102 @@ class _SplashScreenState extends State<SplashScreen>
     super.dispose();
   }
 
+  // BestBid Color Palette
+  static const Color _background = Color(0xFFF5F7FA);
+  static const Color _primary = Color(0xFF0A3069);
+  static const Color _secondary = Color(0xFF2BA8E0);
+  static const Color _textDark = Color(0xFF222222);
+  static const Color _textLight = Color(0xFF666666);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.blue600,
-              AppColors.blue700,
-            ],
-          ),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Animated Logo
-              AnimatedBuilder(
-                animation: _controller,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: _scaleAnimation.value,
-                    child: Transform.rotate(
-                      angle: _rotateAnimation.value * 3.14159 / 180,
-                      child: Container(
-                        width: 96,
-                        height: 96,
-                        decoration: BoxDecoration(
-                          color: AppColors.secondary,
-                          borderRadius: BorderRadius.circular(24),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              blurRadius: 20,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.gavel,
-                          size: 48,
-                          color: AppColors.blue900,
-                        ),
+      backgroundColor: _background,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Animated Logo
+            AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+                return Transform.scale(
+                  scale: _scaleAnimation.value,
+                  child: Transform.rotate(
+                    angle: _rotateAnimation.value * 3.14159 / 180,
+                    child: Container(
+                      width: 96,
+                      height: 96,
+                      decoration: BoxDecoration(
+                        color: _primary,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.06),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.gavel,
+                        size: 48,
+                        color: Colors.white,
                       ),
                     ),
-                  );
-                },
-              ),
+                  ),
+                );
+              },
+            ),
 
-              const SizedBox(height: 24),
+            const SizedBox(height: 24),
 
-              // Animated Text
-              AnimatedBuilder(
-                animation: _opacityAnimation,
-                builder: (context, child) {
-                  return Opacity(
-                    opacity: _opacityAnimation.value,
-                    child: Column(
-                      children: [
-                        Text(
-                          'BidMaster',
-                          style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                                color: AppColors.cardWhite,
-                                fontWeight: FontWeight.bold,
-                              ),
+            // Animated Text
+            AnimatedBuilder(
+              animation: _opacityAnimation,
+              builder: (context, child) {
+                return Opacity(
+                  opacity: _opacityAnimation.value,
+                  child: Column(
+                    children: [
+                      Text(
+                        'BidMaster',
+                        style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                              color: _textDark,
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Win. Sell. Succeed.',
+                        style: TextStyle(
+                          color: _textLight,
+                          fontSize: 14,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Win. Sell. Succeed.',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: AppColors.blue100,
-                                fontSize: 14,
-                              ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
 
-              const SizedBox(height: 24),
+            const SizedBox(height: 24),
 
-              // Animated Progress Bar
-              AnimatedBuilder(
-                animation: _widthAnimation,
-                builder: (context, child) {
-                  return Container(
-                    height: 4,
-                    width: _widthAnimation.value,
-                    decoration: BoxDecoration(
-                      color: AppColors.secondary,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
+            // Animated Progress Bar
+            AnimatedBuilder(
+              animation: _widthAnimation,
+              builder: (context, child) {
+                return Container(
+                  height: 4,
+                  width: _widthAnimation.value,
+                  decoration: BoxDecoration(
+                    color: _secondary,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                );
+              },
+            ),
+          ],
         ),
       ),
     );

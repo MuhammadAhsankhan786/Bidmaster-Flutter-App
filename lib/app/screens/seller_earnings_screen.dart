@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
 import '../services/api_service.dart';
+import '../utils/image_url_helper.dart';
 
 class SellerEarningsScreen extends StatefulWidget {
   const SellerEarningsScreen({super.key});
@@ -225,7 +226,7 @@ class _SellerEarningsScreenState extends State<SellerEarningsScreen> {
                                         ? ClipRRect(
                                             borderRadius: BorderRadius.circular(8),
                                             child: Image.network(
-                                              imageUrl,
+                                              ImageUrlHelper.fixImageUrl(imageUrl),
                                               width: 50,
                                               height: 50,
                                               fit: BoxFit.cover,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import '../services/storage_service.dart';
 import '../services/api_service.dart';
@@ -122,7 +123,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Role switched to ${newRole == 'seller' ? 'Seller' : 'Buyer'}'),
+            content: Text('Role switched to ${newRole == 'seller_products' ? 'Seller Products' : 'Company Products'}'),
             backgroundColor: AppColors.success,
             duration: const Duration(seconds: 2),
           ),
@@ -131,7 +132,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // Navigate to appropriate dashboard
         Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) {
-            if (newRole == 'seller') {
+            if (newRole == 'seller_products') {
               context.go('/seller-dashboard');
             } else {
               context.go('/home');
@@ -158,12 +159,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Profile'),
+        backgroundColor: theme.appBarTheme.backgroundColor,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'Profile',
+          style: TextStyle(
+            color: colorScheme.onSurface,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings),
+            icon: Icon(Icons.settings, color: colorScheme.onSurface),
             tooltip: 'Settings',
             onPressed: _scrollToSettings,
           ),
@@ -176,173 +194,413 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: SingleChildScrollView(
                 controller: _scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // User Info Card
-                    RepaintBoundary(
-                      child: UserInfoCard(
-                        userName: _userName,
-                        userEmail: _userEmail,
-                        userPhone: _userPhone,
+                    // User Info Card - BestBid Style
+                    Container(
+                      color: colorScheme.surface,
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          CircleAvatar(
+                            radius: 50,
+                            backgroundColor: colorScheme.primary.withOpacity(0.1),
+                            child: Icon(
+                              Icons.person,
+                              size: 50,
+                              color: colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            _userName ?? 'User',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          if (_userPhone != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              _userPhone!,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: colorScheme.onSurface.withOpacity(0.7),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
 
                     const SizedBox(height: 16),
 
-                    // Reward Balance Card
-                    RepaintBoundary(
-                      child: RewardBalanceCard(
-                        rewardBalance: _rewardBalance,
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Role Toggle Card
-                    RepaintBoundary(
-                      child: RoleToggleCard(
-                        userRole: _userRole,
-                        isTogglingRole: _isTogglingRole,
-                        onRoleChanged: (bool value) {
-                          _toggleRole(value ? 'seller' : 'buyer');
-                        },
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Wallet Button
-                    RepaintBoundary(
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          context.push('/wallet');
-                        },
-                        icon: const Icon(Icons.account_balance_wallet),
-                        label: const Text('Wallet'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                    // Reward Balance Card - BestBid Style
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
+                              blurRadius: 16,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Reward Balance',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: colorScheme.onSurface.withOpacity(0.7),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '\$${_rewardBalance.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: colorScheme.primary.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                Icons.account_balance_wallet,
+                                size: 32,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
 
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
 
-                    // Invite & Earn Button
-                    RepaintBoundary(
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          context.push('/invite-and-earn');
-                        },
-                        icon: const Icon(Icons.people),
-                        label: const Text('Invite & Earn'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                        ),
+                    // Quick Actions - BestBid Style
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Quick Actions',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          // Wallet Button
+                          _ActionButton(
+                            icon: Icons.account_balance_wallet,
+                            label: 'Wallet',
+                            onTap: () {
+                              try {
+                                context.push('/wallet');
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Error: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          // Invite & Earn Button
+                          _ActionButton(
+                            icon: Icons.people,
+                            label: 'Invite & Earn',
+                            onTap: () {
+                              context.push('/invite-and-earn');
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          // My Bids Button
+                          _ActionButton(
+                            icon: Icons.gavel,
+                            label: 'My Bids',
+                            onTap: () {
+                              context.push('/buyer-bidding-history');
+                            },
+                          ),
+                        ],
                       ),
                     ),
 
                     const SizedBox(height: 24),
 
-                    // Settings Section
-                    Container(
-                      key: _settingsKey,
-                      child: Text(
-                        'Settings',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Theme Toggle
-                    RepaintBoundary(
-                      child: const ThemeToggleTile(),
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    // Role Toggle in Settings
-                    Card(
-                      child: ListTile(
-                        leading: Icon(
-                          Icons.swap_horiz,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        title: const Text('Switch Role'),
-                        subtitle: Text(
-                          'Current: ${(_userRole == 'seller') ? 'Seller' : (_userRole == 'buyer' ? 'Buyer' : 'Not Set')}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        trailing: _isTogglingRole
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : Switch(
-                                value: _userRole == 'seller',
-                                onChanged: (bool value) {
-                                  _toggleRole(value ? 'seller' : 'buyer');
-                                },
+                    // Settings Section - BestBid Style
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            key: _settingsKey,
+                            child: Text(
+                              'Settings',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onSurface,
                               ),
-                        onTap: _isTogglingRole
-                            ? null
-                            : () {
-                                if (_userRole == 'seller') {
-                                  _toggleRole('buyer');
-                                } else {
-                                  _toggleRole('seller');
-                                }
-                              },
-                      ),
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    // Logout Button
-                    Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.logout, color: AppColors.error),
-                        title: const Text('Logout'),
-                        onTap: () async {
-                          final shouldLogout = await showDialog<bool>(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: const Text('Logout'),
-                              content: const Text('Are you sure you want to logout?'),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, false),
-                                  child: const Text('Cancel'),
-                                ),
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, true),
-                                  child: const Text('Logout', style: TextStyle(color: AppColors.error)),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          
+                          // Role Toggle Card
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: colorScheme.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 2),
                                 ),
                               ],
                             ),
-                          );
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.primary.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    Icons.swap_horiz,
+                                    color: colorScheme.primary,
+                                    size: 24,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Switch Role',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: colorScheme.onSurface,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Current: ${(_userRole == 'seller_products') ? 'Seller Products' : (_userRole == 'company_products' ? 'Company Products' : 'Not Set')}',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: colorScheme.onSurface.withOpacity(0.7),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                _isTogglingRole
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : Switch(
+                                        value: _userRole == 'seller_products',
+                                        onChanged: (bool value) {
+                                          _toggleRole(value ? 'seller_products' : 'company_products');
+                                        },
+                                      ),
+                              ],
+                            ),
+                          ),
 
-                          if (shouldLogout == true && mounted) {
-                            await StorageService.clearAll();
-                            if (mounted) {
-                              context.go('/auth');
-                            }
-                          }
-                        },
+                          const SizedBox(height: 8),
+
+                          // Theme Toggle
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: colorScheme.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: const ThemeToggleTile(),
+                          ),
+
+                          const SizedBox(height: 8),
+
+                          // Logout Button
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: colorScheme.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: AppColors.error.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.logout,
+                                  color: AppColors.error,
+                                  size: 24,
+                                ),
+                              ),
+                              title: const Text(
+                                'Logout',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.error,
+                                ),
+                              ),
+                              onTap: () async {
+                                final shouldLogout = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('Logout'),
+                                    content: const Text('Are you sure you want to logout?'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context, false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context, true),
+                                        child: const Text('Logout', style: TextStyle(color: AppColors.error)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+
+                                if (shouldLogout == true && mounted) {
+                                  await StorageService.clearAll();
+                                  if (mounted) {
+                                    context.go('/auth');
+                                  }
+                                }
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+
+                    const SizedBox(height: 24),
                   ],
                 ),
               ),
             ),
+    );
+  }
+}
+
+// Action Button Widget - BestBid Style
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
+              blurRadius: 16,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: colorScheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                icon,
+                color: colorScheme.primary,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: colorScheme.onSurface,
+              ),
+            ),
+            const Spacer(),
+            Icon(
+              Icons.chevron_right,
+              color: colorScheme.onSurface,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
