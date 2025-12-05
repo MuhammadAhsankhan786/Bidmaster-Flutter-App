@@ -1636,6 +1636,52 @@ class ApiService {
     }
   }
 
+  // ==================== BANNERS METHODS ====================
+
+  /// GET /api/banners
+  /// Get all active banners for carousel (Production-ready)
+  /// Returns list of banner objects with imageUrl, title, link, etc.
+  Future<List<Map<String, dynamic>>> getBanners() async {
+    try {
+      if (kDebugMode) {
+        print('✅ Fetching banners from API');
+      }
+      
+      final response = await _dio.get('/banners');
+      
+      if (response.data['success'] == true && response.data['data'] != null) {
+        final bannersList = (response.data['data'] as List)
+            .map((banner) => banner as Map<String, dynamic>)
+            .toList();
+        
+        // Filter only active banners
+        final activeBanners = bannersList.where((banner) {
+          final isActive = banner['isActive'] ?? true;
+          final imageUrl = banner['imageUrl'] ?? banner['image_url'];
+          return isActive == true && imageUrl != null && imageUrl.toString().isNotEmpty;
+        }).toList();
+        
+        if (kDebugMode) {
+          print('✅ Banners fetched: ${activeBanners.length} active banners');
+        }
+        
+        return activeBanners;
+      } else {
+        if (kDebugMode) {
+          print('⚠️ No banners in response, returning empty list');
+        }
+        return [];
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error fetching banners: $e');
+        print('   Will use fallback banners');
+      }
+      // Return empty list on error - widget will use fallback
+      return [];
+    }
+  }
+
   // ==================== ERROR HANDLING ====================
 
   String _handleError(dynamic error) {

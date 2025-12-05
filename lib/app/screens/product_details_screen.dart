@@ -39,11 +39,42 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   List<BidModel> _bids = [];
   bool _isLoading = true;
   String? _errorMessage;
+  String? _userRole;
+  int? _userId;
 
   @override
   void initState() {
     super.initState();
+    _loadUserInfo();
     _loadProductData();
+  }
+
+  Future<void> _loadUserInfo() async {
+    final role = await StorageService.getUserRole();
+    final userId = await StorageService.getUserId();
+    setState(() {
+      _userRole = role;
+      _userId = userId;
+    });
+  }
+
+  // Check if current user can edit/delete this product
+  bool get _canEditProduct {
+    if (_product == null || _userRole == null) return false;
+    
+    final role = _userRole!.toLowerCase();
+    
+    // Superadmin can edit/delete any product
+    if (role == 'superadmin' || role == 'admin') {
+      return true;
+    }
+    
+    // Seller can only edit/delete their own products
+    if (role == 'seller_products' && _userId != null) {
+      return _product!.sellerId == _userId;
+    }
+    
+    return false;
   }
 
   Future<void> _loadProductData() async {
@@ -149,6 +180,48 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       shape: const CircleBorder(),
                     ),
                   ),
+                  // Edit/Delete buttons for seller/superadmin
+                  if (_canEditProduct) ...[
+                    const SizedBox(width: 8),
+                    PopupMenuButton<String>(
+                      icon: Icon(Icons.more_vert, color: _textDark),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      onSelected: (value) async {
+                        if (value == 'edit') {
+                          final productId = int.tryParse(widget.productId);
+                          if (productId != null) {
+                            context.push('/product-creation?productId=$productId');
+                          }
+                        } else if (value == 'delete') {
+                          await _showDeleteConfirmation();
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit, size: 20, color: _primary),
+                              const SizedBox(width: 12),
+                              const Text('Edit Product'),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete, size: 20, color: _timer),
+                              const SizedBox(width: 12),
+                              Text('Delete Product', style: TextStyle(color: _timer)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -791,6 +864,84 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       return '${difference.inDays} ${difference.inDays == 1 ? 'day' : 'days'} ago';
     } else {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    }
+  }
+
+  Future<void> _showDeleteConfirmation() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Product'),
+        content: Text(
+          'Are you sure you want to delete "${_product?.title ?? 'this product'}"? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _timer,
+              foregroundColor: _cardBackground,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && _product != null) {
+      await _deleteProduct();
+    }
+  }
+
+  Future<void> _deleteProduct() async {
+    try {
+      final productId = int.tryParse(widget.productId);
+      if (productId == null) return;
+
+      // Show loading
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(child: CircularProgressIndicator()),
+        );
+      }
+
+      await apiService.deleteProduct(productId);
+
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Product deleted successfully'),
+            backgroundColor: _success,
+          ),
+        );
+
+        // Navigate back
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go('/home');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete product: ${e.toString()}'),
+            backgroundColor: _timer,
+          ),
+        );
+      }
     }
   }
 }
