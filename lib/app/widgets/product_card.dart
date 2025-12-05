@@ -101,6 +101,24 @@ class _ProductCardState extends State<ProductCard> {
     }
   }
 
+  String _formatDigitalTimer() {
+    if (_remaining.isNegative || _remaining.inSeconds <= 0) {
+      return '00h 00m 00s';
+    }
+
+    final days = _remaining.inDays;
+    final hours = _remaining.inHours % 24;
+    final minutes = _remaining.inMinutes % 60;
+    final seconds = _remaining.inSeconds % 60;
+
+    // Digital format: 00h 00m 00s
+    if (days > 0) {
+      return '${days.toString().padLeft(2, '0')}d ${hours.toString().padLeft(2, '0')}h ${minutes.toString().padLeft(2, '0')}m';
+    } else {
+      return '${hours.toString().padLeft(2, '0')}h ${minutes.toString().padLeft(2, '0')}m ${seconds.toString().padLeft(2, '0')}s';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -233,28 +251,49 @@ class _ProductCardState extends State<ProductCard> {
                       ),
                     ),
 
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 4),
 
-                    // Price Row - Price (left) + Heart icon (right)
+                    // Timer and Price Row - Side by side badges
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        // Price - Bold, #0A3069 - BestBid format
-                        Flexible(
+                        // Timer Badge - Red with white text
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _timerBg,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
                           child: Text(
-                            '\$${_formatCurrency(widget.currentBid)} USD',
+                            _formatDigitalTimer(),
                             style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: _primary,
+                              fontSize: 10,
+                              color: _timerText,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
                             ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
                           ),
                         ),
 
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 6),
+
+                        // Price Badge - Grey with black text
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE5E5E5), // Light grey
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${_formatCurrency(widget.currentBid)} \$',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: _textDark,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+
+                        const Spacer(),
 
                         // Heart icon
                         GestureDetector(
@@ -270,20 +309,6 @@ class _ProductCardState extends State<ProductCard> {
                           ),
                         ),
                       ],
-                    ),
-
-                    const SizedBox(height: 2),
-
-                    // Timer display - Compact format
-                    Text(
-                      _formatTimer(),
-                      style: const TextStyle(
-                        fontSize: 8,
-                        color: _textLight,
-                        fontWeight: FontWeight.w400,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),

@@ -114,10 +114,9 @@ class _SplashScreenState extends State<SplashScreen>
                   child: Transform.rotate(
                     angle: _rotateAnimation.value * 3.14159 / 180,
                     child: Container(
-                      width: 96,
-                      height: 96,
+                      width: 120,
+                      height: 120,
                       decoration: BoxDecoration(
-                        color: _primary,
                         borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
@@ -127,10 +126,30 @@ class _SplashScreenState extends State<SplashScreen>
                           ),
                         ],
                       ),
-                      child: const Icon(
-                        Icons.gavel,
-                        size: 48,
-                        color: Colors.white,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+                        child: Image.asset(
+                          'assets/images/iq_logo.png',
+                          width: 120,
+                          height: 120,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) {
+                            // Fallback to a simple container if image not found
+                            return Container(
+                              width: 120,
+                              height: 120,
+                              decoration: BoxDecoration(
+                                color: _primary,
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              child: const Icon(
+                                Icons.gavel,
+                                size: 48,
+                                color: Colors.white,
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),
