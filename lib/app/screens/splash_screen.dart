@@ -129,7 +129,7 @@ class _SplashScreenState extends State<SplashScreen>
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(24),
                         child: Image.asset(
-                          'assets/images/iq_logo.png',
+                          'assets/images/bid-logo.jpeg',
                           width: 120,
                           height: 120,
                           fit: BoxFit.contain,

@@ -24,6 +24,16 @@ class TokenRefreshInterceptor extends Interceptor {
     // Attach access token to all requests
     final accessToken = await StorageService.getAccessToken();
     
+    if (kDebugMode) {
+      print('🔍 [TokenInterceptor] onRequest:');
+      print('   Path: ${options.path}');
+      print('   Method: ${options.method}');
+      print('   Has Access Token: ${accessToken != null}');
+      if (accessToken != null) {
+        print('   Token preview: ${accessToken.substring(0, 30)}...');
+      }
+    }
+    
     if (accessToken != null) {
       // 🔧 FIX: Verify token role matches SharedPreferences role before API calls
       final storedRole = await StorageService.getUserRole();
@@ -120,6 +130,14 @@ class TokenRefreshInterceptor extends Interceptor {
       
       // Roles match - proceed with request
       options.headers['Authorization'] = 'Bearer $accessToken';
+      if (kDebugMode) {
+        print('✅ Token attached to request');
+      }
+    } else {
+      if (kDebugMode) {
+        print('⚠️ No access token found - request will be unauthenticated');
+        print('   This may cause 401 errors for protected routes');
+      }
     }
     
     handler.next(options);

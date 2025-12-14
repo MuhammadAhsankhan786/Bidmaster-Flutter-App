@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
 import '../services/api_service.dart';
+import '../services/storage_service.dart';
 
 class PlaceBidModal extends StatefulWidget {
   final int currentBid;
@@ -27,13 +29,13 @@ class _PlaceBidModalState extends State<PlaceBidModal>
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
 
-  int get _minBid => widget.currentBid + 100;
+  int get _minBid => widget.currentBid + 1;
 
   List<int> get _suggestedBids => [
-        widget.currentBid + 100,
-        widget.currentBid + 250,
-        widget.currentBid + 500,
-        widget.currentBid + 1000,
+        widget.currentBid + 1,
+        widget.currentBid + 5,
+        widget.currentBid + 10,
+        widget.currentBid + 25,
       ];
 
   @override
@@ -59,6 +61,29 @@ class _PlaceBidModalState extends State<PlaceBidModal>
   Future<void> _handleSubmit() async {
     final amount = double.tryParse(_bidController.text);
     if (amount == null || amount < _minBid) {
+      return;
+    }
+
+    // Check if user is logged in before placing bid
+    final isLoggedIn = await StorageService.isLoggedIn();
+    final accessToken = await StorageService.getAccessToken();
+    
+    if (!isLoggedIn || accessToken == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please login first'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        Navigator.of(context).pop();
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            context.go('/auth');
+          }
+        });
+      }
       return;
     }
 
@@ -91,12 +116,51 @@ class _PlaceBidModalState extends State<PlaceBidModal>
         // Extract user-friendly error message
         String errorMessage = 'Failed to place bid. Please try again.';
         
-        final errorString = e.toString();
+        final errorString = e.toString().toLowerCase();
+        
+        // Check if error is due to authentication failure
+        if (errorString.contains('401') || 
+            errorString.contains('unauthorized') || 
+            errorString.contains('token') ||
+            errorString.contains('login') ||
+            errorString.contains('session expired')) {
+          errorMessage = 'Please login first';
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please login first'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          Navigator.of(context).pop();
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              context.go('/auth');
+            }
+          });
+          return;
+        }
         
         // Handle specific error cases
         if (errorString.contains('cannot bid on your own product') || 
             errorString.contains('own product')) {
           errorMessage = 'You cannot bid on your own product.';
+        } else if (errorString.contains('status: pending') || 
+                   errorString.contains('not available for bidding') && errorString.contains('pending')) {
+          errorMessage = 'This product is pending admin approval. Bidding will be available once approved.';
+        } else if (errorString.contains('not available for bidding')) {
+          // Extract status from error message
+          final statusMatch = RegExp(r'status:\s*(\w+)').firstMatch(errorString);
+          if (statusMatch != null) {
+            final status = statusMatch.group(1);
+            if (status == 'pending') {
+              errorMessage = 'This product is pending admin approval. Bidding will be available once approved.';
+            } else {
+              errorMessage = 'This product is not available for bidding (status: $status).';
+            }
+          } else {
+            errorMessage = 'This product is not available for bidding.';
+          }
         } else if (errorString.contains('minimum bid') || 
                    errorString.contains('bid amount')) {
           errorMessage = 'Bid amount is too low. Please enter a higher amount.';

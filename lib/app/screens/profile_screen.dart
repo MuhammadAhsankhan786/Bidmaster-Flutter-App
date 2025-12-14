@@ -6,7 +6,6 @@ import '../services/api_service.dart';
 import '../theme/colors.dart';
 import '../widgets/user_info_card.dart';
 import '../widgets/reward_balance_card.dart';
-import '../widgets/role_toggle_card.dart';
 import '../widgets/theme_toggle_tile.dart';
 import 'invite_and_earn_screen.dart';
 
@@ -27,7 +26,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   double _rewardBalance = 0.0;
   String? _userRole;
   bool _isLoading = true;
-  bool _isTogglingRole = false;
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _settingsKey = GlobalKey();
 
@@ -102,60 +100,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _toggleRole(String newRole) async {
-    if (_isTogglingRole) return;
-
-    setState(() {
-      _isTogglingRole = true;
-    });
-
-    try {
-      // Call API to update role
-      await apiService.updateProfile(role: newRole);
-
-      // Update local state
-      setState(() {
-        _userRole = newRole;
-        _isTogglingRole = false;
-      });
-
-      // Show success message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Role switched to ${newRole == 'seller_products' ? 'Seller Products' : 'Company Products'}'),
-            backgroundColor: AppColors.success,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-
-        // Navigate to appropriate dashboard
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            if (newRole == 'seller_products') {
-              context.go('/seller-dashboard');
-            } else {
-              context.go('/home');
-            }
-          }
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _isTogglingRole = false;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to switch role: ${e.toString()}'),
-            backgroundColor: AppColors.error,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -197,28 +141,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // User Info Card - BestBid Style
+                    // User Info Card - Professional Style
                     Container(
                       color: colorScheme.surface,
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
                       child: Column(
                         children: [
-                          CircleAvatar(
-                            radius: 50,
-                            backgroundColor: colorScheme.primary.withOpacity(0.1),
+                          Container(
+                            width: 100,
+                            height: 100,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                colors: [
+                                  colorScheme.primary.withOpacity(0.2),
+                                  colorScheme.primary.withOpacity(0.1),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              border: Border.all(
+                                color: colorScheme.primary.withOpacity(0.3),
+                                width: 2,
+                              ),
+                            ),
                             child: Icon(
-                              Icons.person,
-                              size: 50,
+                              Icons.person_outline,
+                              size: 56,
                               color: colorScheme.primary,
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 20),
                           Text(
                             _userName ?? 'User',
                             style: TextStyle(
-                              fontSize: 22,
+                              fontSize: 24,
                               fontWeight: FontWeight.bold,
                               color: colorScheme.onSurface,
+                              letterSpacing: 0.3,
                             ),
                           ),
                           if (_userPhone != null) ...[
@@ -226,8 +186,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             Text(
                               _userPhone!,
                               style: TextStyle(
-                                fontSize: 14,
-                                color: colorScheme.onSurface.withOpacity(0.7),
+                                fontSize: 15,
+                                color: colorScheme.onSurface.withOpacity(0.6),
+                                letterSpacing: 0.2,
                               ),
                             ),
                           ],
@@ -237,55 +198,70 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                     const SizedBox(height: 16),
 
-                    // Reward Balance Card - BestBid Style
+                    // Reward Balance Card - Professional Style
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
                           color: colorScheme.surface,
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: colorScheme.primary.withOpacity(0.1),
+                            width: 1,
+                          ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
-                              blurRadius: 16,
-                              offset: const Offset(0, 2),
+                              color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
+                              blurRadius: 20,
+                              offset: const Offset(0, 4),
+                              spreadRadius: 0,
                             ),
                           ],
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Reward Balance',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: colorScheme.onSurface.withOpacity(0.7),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Reward Balance',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: colorScheme.onSurface.withOpacity(0.6),
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 0.3,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  '\$${_rewardBalance.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.primary,
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    '\$${_rewardBalance.toStringAsFixed(2)}',
+                                    style: TextStyle(
+                                      fontSize: 32,
+                                      fontWeight: FontWeight.bold,
+                                      color: colorScheme.primary,
+                                      letterSpacing: 0.5,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                             Container(
-                              padding: const EdgeInsets.all(12),
+                              width: 60,
+                              height: 60,
                               decoration: BoxDecoration(
-                                color: colorScheme.primary.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
+                                color: colorScheme.primary.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: colorScheme.primary.withOpacity(0.25),
+                                  width: 1.5,
+                                ),
                               ),
                               child: Icon(
-                                Icons.account_balance_wallet,
-                                size: 32,
+                                Icons.account_balance_wallet_rounded,
+                                size: 30,
                                 color: colorScheme.primary,
                               ),
                             ),
@@ -313,7 +289,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           const SizedBox(height: 12),
                           // Wallet Button
                           _ActionButton(
-                            icon: Icons.account_balance_wallet,
+                            icon: Icons.account_balance_wallet_rounded,
                             label: 'Wallet',
                             onTap: () {
                               try {
@@ -331,7 +307,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           const SizedBox(height: 8),
                           // Invite & Earn Button
                           _ActionButton(
-                            icon: Icons.people,
+                            icon: Icons.person_add_alt_1_rounded,
                             label: 'Invite & Earn',
                             onTap: () {
                               context.push('/invite-and-earn');
@@ -340,7 +316,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           const SizedBox(height: 8),
                           // My Bids Button
                           _ActionButton(
-                            icon: Icons.gavel,
+                            icon: Icons.gavel_rounded,
                             label: 'My Bids',
                             onTap: () {
                               context.push('/buyer-bidding-history');
@@ -370,76 +346,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          
-                          // Role Toggle Card
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: colorScheme.surface,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
-                                  blurRadius: 16,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.primary.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(
-                                    Icons.swap_horiz,
-                                    color: colorScheme.primary,
-                                    size: 24,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Switch Role',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: colorScheme.onSurface,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Current: ${(_userRole == 'seller_products') ? 'Seller Products' : (_userRole == 'company_products' ? 'Company Products' : 'Not Set')}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: colorScheme.onSurface.withOpacity(0.7),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                _isTogglingRole
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(strokeWidth: 2),
-                                      )
-                                    : Switch(
-                                        value: _userRole == 'seller_products',
-                                        onChanged: (bool value) {
-                                          _toggleRole(value ? 'seller_products' : 'company_products');
-                                        },
-                                      ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(height: 8),
 
                           // Theme Toggle
                           Container(
@@ -477,15 +383,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             child: ListTile(
                               contentPadding: EdgeInsets.zero,
                               leading: Container(
-                                padding: const EdgeInsets.all(10),
+                                width: 44,
+                                height: 44,
                                 decoration: BoxDecoration(
-                                  color: AppColors.error.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(8),
+                                  color: AppColors.error.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: AppColors.error.withOpacity(0.2),
+                                    width: 1,
+                                  ),
                                 ),
                                 child: const Icon(
-                                  Icons.logout,
+                                  Icons.logout_rounded,
                                   color: AppColors.error,
-                                  size: 24,
+                                  size: 22,
                                 ),
                               ),
                               title: const Text(
@@ -573,30 +484,38 @@ class _ActionButton extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
-                color: colorScheme.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+                color: colorScheme.primary.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: colorScheme.primary.withOpacity(0.2),
+                  width: 1,
+                ),
               ),
               child: Icon(
                 icon,
                 color: colorScheme.primary,
-                size: 24,
+                size: 22,
               ),
             ),
-            const SizedBox(width: 12),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: colorScheme.onSurface,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSurface,
+                  letterSpacing: 0.2,
+                ),
               ),
             ),
-            const Spacer(),
             Icon(
-              Icons.chevron_right,
-              color: colorScheme.onSurface,
+              Icons.chevron_right_rounded,
+              color: colorScheme.onSurface.withOpacity(0.5),
+              size: 24,
             ),
           ],
         ),

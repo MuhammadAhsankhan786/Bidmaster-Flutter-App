@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
 import '../services/api_service.dart';
+import '../services/storage_service.dart';
 import '../models/notification_model.dart';
+import '../utils/network_utils.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -23,6 +26,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _loadNotifications({bool? read}) async {
+    // Check if user is logged in
+    final isLoggedIn = await StorageService.isLoggedIn();
+    final accessToken = await StorageService.getAccessToken();
+    
+    if (!isLoggedIn || accessToken == null) {
+      setState(() {
+        _errorMessage = 'Please login first';
+        _isLoading = false;
+      });
+      // Redirect to login after a delay
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          context.go('/auth');
+        }
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -35,8 +56,26 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         _isLoading = false;
       });
     } catch (e) {
+      // Check for network errors
+      String errorMsg = 'Failed to load notifications';
+      if (NetworkUtils.isNetworkError(e)) {
+        errorMsg = NetworkUtils.getNetworkErrorMessage(e);
+      } else if (e.toString().contains('401') || 
+                 e.toString().contains('unauthorized') ||
+                 e.toString().contains('token') ||
+                 e.toString().contains('login')) {
+        errorMsg = 'Please login first';
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            context.go('/auth');
+          }
+        });
+      } else {
+        errorMsg = e.toString();
+      }
+      
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = errorMsg;
         _isLoading = false;
       });
     }
@@ -117,6 +156,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           onPressed: () => _loadNotifications(),
                           child: const Text('Retry'),
                         ),
+                        if (_errorMessage?.contains('login') == true || _errorMessage?.contains('Login') == true) ...[
+                          const SizedBox(height: 16),
+                          TextButton(
+                            onPressed: () {
+                              context.go('/auth');
+                            },
+                            child: const Text('Go to Login'),
+                          ),
+                        ],
                       ],
                     ),
                   ),

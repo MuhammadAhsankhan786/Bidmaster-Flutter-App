@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 /// Handles relative URLs and converts them to full URLs
 class ImageUrlHelper {
   /// Get the base URL for images (without /api)
+  /// Uses current base URL (may have switched from local to production)
   static String get imageBaseUrl {
-    final apiBaseUrl = ApiService.baseUrl;
+    // Use currentBaseUrl to get the actual current URL (may have switched)
+    final apiBaseUrl = ApiService.currentBaseUrl;
     // Remove /api from the end if present
     if (apiBaseUrl.endsWith('/api')) {
       return apiBaseUrl.substring(0, apiBaseUrl.length - 4);

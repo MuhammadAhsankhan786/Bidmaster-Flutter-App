@@ -1,6 +1,5 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:http_parser/http_parser.dart';
 import '../models/user_model.dart';
@@ -11,13 +10,15 @@ import 'storage_service.dart';
 import 'token_refresh_interceptor.dart';
 import 'referral_service.dart';
 import '../utils/jwt_utils.dart';
+import '../utils/network_utils.dart';
 
 class ApiService {
-  // Dynamic base URL based on debug/release mode
-  // Debug: Can use localhost (desktop only) or local network IP (web/mobile)
-  // Release: Production server URL or local network IP
+  // Dynamic base URL - Works on both LOCAL and PRODUCTION
+  // Auto-detects based on environment
+  // Priority: Manual override > Debug mode (local with auto-fallback) > Release mode (production)
   static String get baseUrl {
-    // Check if API_BASE_URL is explicitly set (works in both debug and release)
+    // Priority 1: Check if API_BASE_URL is explicitly set (manual override)
+    // This works for BOTH local and production
     const String envUrl = String.fromEnvironment(
       'API_BASE_URL',
       defaultValue: '',
@@ -31,24 +32,56 @@ class ApiService {
           'Current value: $envUrl'
         );
       }
+      print('🌐 Using API URL from --dart-define: $envUrl');
       return envUrl;
     }
     
-    // Default to local URL in debug mode, production in release
-    if (kDebugMode) {
-      // Use local backend for development/testing
-      const String localUrl = 'http://localhost:5000/api';
-      print('🌐 Using LOCAL API URL: $localUrl');
-      print('   Make sure backend is running on http://localhost:5000');
-      return localUrl;
-    }
+    // Priority 2: Auto-detect based on build mode
+    // Debug mode = Try local first, auto-fallback to production if local is closed
+    // Release mode = Production (api.mazaadati.com)
     
-    // Production URL for release builds
-    const String liveUrl = 'https://api.mazaadati.com/api';
-    return liveUrl;
+    if (kDebugMode) {
+      // DEBUG MODE: Try local backend first, auto-fallback to production if closed
+      const String localUrl = 'http://localhost:5000/api';
+      const String productionUrl = 'https://api.mazaadati.com/api';
+      
+      // Try local first - if connection fails, auto-fallback will switch to production
+      print('🌐 [Debug Mode] Attempting LOCAL API first: $localUrl');
+      print('   💡 If local backend is closed, will auto-switch to PRODUCTION: $productionUrl');
+      print('   💡 Both local and production URLs are available');
+      return localUrl;
+    } else {
+      // RELEASE MODE: Use production backend
+      const String productionUrl = 'https://api.mazaadati.com/api';
+      print('🌐 [Release] Using PRODUCTION API: $productionUrl');
+      return productionUrl;
+    }
   }
   
+  // Production URL constant for fallback
+  static const String productionUrl = 'https://api.mazaadati.com/api';
+  static const String localUrl = 'http://localhost:5000/api';
+  
+  /// Get the current base URL (may have switched from local to production)
+  /// Use this instead of baseUrl getter when you need the actual current URL
+  static String get currentBaseUrl {
+    try {
+      // Get current base URL from singleton instance if available
+      if (instance != null && instance!._currentBaseUrl != null) {
+        return instance!._currentBaseUrl!;
+      }
+    } catch (e) {
+      // If instance not initialized yet, fall back to static baseUrl
+    }
+    // Fall back to static baseUrl if instance not available
+    return baseUrl;
+  }
+  
+  // Singleton instance - accessible from static methods
+  static ApiService? instance;
+  
   late Dio _dio;
+  String? _currentBaseUrl;
 
   ApiService() {
     if (kDebugMode) {
@@ -71,6 +104,8 @@ class ApiService {
       );
     }
     
+    _currentBaseUrl = baseUrl;
+    instance = this; // Store instance for static access
     _dio = Dio(BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 30),
@@ -81,12 +116,70 @@ class ApiService {
       },
     ));
     
-    // Add error interceptor to prevent crashes
+    // Add error interceptor with auto-fallback to production
     _dio.interceptors.add(InterceptorsWrapper(
-      onError: (error, handler) {
+      onError: (error, handler) async {
         if (kDebugMode) {
           print('❌ API Error: ${error.message}');
         }
+        
+        // Auto-fallback to production if local connection fails (only in debug mode)
+        // Check all possible connection error types
+        final isConnectionError = error is DioException && (
+          error.type == DioExceptionType.connectionError || 
+          error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          error.type == DioExceptionType.receiveTimeout ||
+          error.message?.toLowerCase().contains('connection refused') == true ||
+          error.message?.toLowerCase().contains('connection timeout') == true ||
+          error.message?.toLowerCase().contains('failed host lookup') == true ||
+          error.message?.toLowerCase().contains('connection errored') == true ||
+          error.message?.toLowerCase().contains('network is unreachable') == true ||
+          error.message?.toLowerCase().contains('socketexception') == true ||
+          error.message?.toLowerCase().contains('err_connection_refused') == true ||
+          error.message?.toLowerCase().contains('err_connection_timed_out') == true ||
+          error.message?.toLowerCase().contains('err_network_changed') == true ||
+          (error.response?.statusCode == null && error.type == DioExceptionType.unknown)
+        );
+        
+        if (kDebugMode && 
+            isConnectionError &&
+            _currentBaseUrl == localUrl) {
+          print('=' * 60);
+          print('⚠️ Local backend connection failed!');
+          print('   Error: ${error.message}');
+          print('   🔄 Auto-switching to PRODUCTION API...');
+          print('   From: $localUrl');
+          print('   To: $productionUrl');
+          print('=' * 60);
+          
+          // Update base URL to production
+          _dio.options.baseUrl = productionUrl;
+          _currentBaseUrl = productionUrl;
+          
+          // Update token refresh interceptor base URL
+          for (var interceptor in _dio.interceptors) {
+            if (interceptor is TokenRefreshInterceptor) {
+              interceptor.setBaseUrl(productionUrl);
+            }
+          }
+          
+          // Retry the request with production URL
+          try {
+            final retryOptions = error.requestOptions.copyWith(baseUrl: productionUrl);
+            final retryResponse = await _dio.fetch(retryOptions);
+            print('✅ Request succeeded with PRODUCTION API');
+            return handler.resolve(retryResponse);
+          } catch (retryError) {
+            // If production also fails, return original error
+            if (kDebugMode) {
+              print('❌ Production API also failed: $retryError');
+            }
+            handler.next(error);
+          }
+          return;
+        }
+        
         // Don't let errors crash the app
         handler.next(error);
       },
@@ -489,7 +582,9 @@ class ApiService {
   }) async {
     try {
       if (kDebugMode) {
-        print('✅ Connected to live DB - Registering user');
+        print('✅ Register API Call:');
+        print('   Current Base URL: ${currentBaseUrl}');
+        print('   Full URL: ${currentBaseUrl}/auth/register');
         print('   Name: $name, Phone: $phone, Role: $role');
       }
       
@@ -552,6 +647,40 @@ class ApiService {
     } catch (e) {
       if (kDebugMode) {
         print('❌ Registration error: $e');
+      }
+      
+      // Better error handling for 500 and other errors
+      if (e is DioException && e.response != null) {
+        final statusCode = e.response?.statusCode;
+        final errorData = e.response?.data;
+        
+        if (kDebugMode) {
+          print('   ⚠️ Response Status: $statusCode');
+          print('   Response Data: $errorData');
+        }
+        
+        // Extract error message from response
+        if (errorData is Map) {
+          final message = errorData['message'] as String?;
+          final errorInfo = errorData['error'] as Map?;
+          
+          if (message != null) {
+            if (kDebugMode) {
+              print('   ⚠️ $statusCode Error: $message');
+              if (errorInfo != null) {
+                print('   Error Details: $errorInfo');
+              }
+            }
+            
+            // Re-throw with better message
+            throw DioException(
+              requestOptions: e.requestOptions,
+              response: e.response,
+              type: e.type,
+              error: message,
+            );
+          }
+        }
       }
       throw _handleError(e);
     }
@@ -663,8 +792,22 @@ class ApiService {
   /// When role is updated, backend returns new tokens that must be saved
   Future<UserModel> updateProfile({String? name, String? phone, String? role}) async {
     try {
-      print('✅ Connected to live DB - Updating profile');
-      print('   Name: $name, Phone: $phone, Role: $role');
+      // Check if token exists before making request
+      final accessToken = await StorageService.getAccessToken();
+      if (kDebugMode) {
+        print('✅ Connected to live DB - Updating profile');
+        print('   Name: $name, Phone: $phone, Role: $role');
+        print('   Has Access Token: ${accessToken != null}');
+        if (accessToken != null) {
+          print('   Token preview: ${accessToken.substring(0, 30)}...');
+        } else {
+          print('   ⚠️ WARNING: No access token found! Request may fail with 401');
+        }
+      }
+      
+      if (accessToken == null) {
+        throw Exception('No access token found. Please login again.');
+      }
       
       final response = await _dio.patch(
         '/auth/profile',
@@ -731,11 +874,25 @@ class ApiService {
       
       // Debug: Print error details
       if (e is DioException && e.response != null) {
-        print('🔍 DEBUG: Error response status: ${e.response?.statusCode}');
+        final statusCode = e.response?.statusCode;
+        print('🔍 DEBUG: Error response status: $statusCode');
         print('🔍 DEBUG: Error response data: ${e.response?.data}');
         final errorMessage = e.response?.data?['message'] ?? e.response?.data?['error'];
         if (errorMessage != null) {
           print('🔍 DEBUG: Backend error message: "$errorMessage"');
+        }
+        
+        // Handle 401 Unauthorized - Token missing or invalid
+        if (statusCode == 401) {
+          final token = await StorageService.getAccessToken();
+          if (token == null) {
+            print('❌ No access token in storage - user needs to login');
+            throw Exception('Session expired. Please login again.');
+          } else {
+            print('⚠️ Token exists but request was rejected - token may be expired or invalid');
+            print('   Token preview: ${token.substring(0, 30)}...');
+            throw Exception('Authentication failed. Please login again.');
+          }
         }
       }
       
@@ -792,7 +949,9 @@ class ApiService {
         throw Exception('Invalid API response: data is not a list');
       }
       
-      print('✅ Fetched ${dataList.length} records from database');
+      if (kDebugMode) {
+        print('✅ Fetched ${dataList.length} records from database');
+      }
       
       final products = <ProductModel>[];
       for (int i = 0; i < dataList.length; i++) {
@@ -918,9 +1077,10 @@ class ApiService {
       String contentType = 'image/jpeg';
       String fileName = filename ?? 'image.jpg';
 
-      if (kIsWeb && imageData is Uint8List) {
-        // Web: Use bytes directly
-        print('📤 Uploading image from bytes (web): ${imageData.length} bytes');
+      // Handle different image data types based on platform
+      if (imageData is Uint8List) {
+        // Web/Mobile: Use bytes directly
+        print('📤 Uploading image from bytes: ${imageData.length} bytes');
         
         // Try to detect image type from bytes
         if (imageData.length >= 4) {
@@ -942,29 +1102,42 @@ class ApiService {
           filename: fileName,
           contentType: MediaType('image', contentType.split('/').last),
         );
-      } else if (imageData is File) {
-        // Mobile: Use File
-        print('📤 Uploading image: ${imageData.path}');
-        
-        fileName = imageData.path.split('/').last;
-        final fileExtension = fileName.split('.').last.toLowerCase();
-        
-        // Determine content type
-        if (fileExtension == 'png') {
-          contentType = 'image/png';
-        } else if (fileExtension == 'gif') {
-          contentType = 'image/gif';
-        } else if (fileExtension == 'webp') {
-          contentType = 'image/webp';
-        }
+      } else if (!kIsWeb) {
+        // Mobile/Desktop: Try to use as File (check for path property)
+        // Use dynamic to avoid File type import on web
+        try {
+          final dynamic file = imageData;
+          final filePath = file.path as String?;
+          if (filePath != null && filePath.isNotEmpty) {
+            // It's a File-like object
+            print('📤 Uploading image from file: $filePath');
+            
+            fileName = filePath.split('/').last;
+            final fileExtension = fileName.split('.').last.toLowerCase();
+            
+            // Determine content type
+            if (fileExtension == 'png') {
+              contentType = 'image/png';
+            } else if (fileExtension == 'gif') {
+              contentType = 'image/gif';
+            } else if (fileExtension == 'webp') {
+              contentType = 'image/webp';
+            }
 
-        multipartFile = await MultipartFile.fromFile(
-          imageData.path,
-          filename: fileName,
-          contentType: MediaType('image', fileExtension),
-        );
+            multipartFile = await MultipartFile.fromFile(
+              filePath,
+              filename: fileName,
+              contentType: MediaType('image', fileExtension),
+            );
+          } else {
+            throw Exception('Invalid image data type. Expected Uint8List or File with path.');
+          }
+        } catch (e) {
+          throw Exception('Invalid image data type. Expected Uint8List or File. Error: $e');
+        }
       } else {
-        throw Exception('Invalid image data type. Expected File or Uint8List.');
+        // Web: Only Uint8List is supported
+        throw Exception('Invalid image data type. On web, only Uint8List is supported.');
       }
 
       // Create FormData for multipart upload
@@ -1212,6 +1385,21 @@ class ApiService {
         final statusCode = e.response?.statusCode;
         final errorData = e.response?.data;
         
+        // Extract error message from response
+        if (errorData is Map && errorData['message'] != null) {
+          final message = errorData['message'] as String;
+          print('   ⚠️ $statusCode Bad Request: $message');
+          print('   Response data: $errorData');
+          
+          // Re-throw with better message
+          throw DioException(
+            requestOptions: e.requestOptions,
+            response: e.response,
+            type: e.type,
+            error: message,
+          );
+        }
+        
         if (statusCode == 400) {
           final errorMessage = errorData is Map 
               ? (errorData['message'] ?? errorData['error'] ?? 'Invalid bid request')
@@ -1296,8 +1484,25 @@ class ApiService {
       
       print('✅ JWT verified');
       
-      final notifications = (response.data['data'] as List)
-          .map((json) => NotificationModel.fromJson(json))
+      // Handle different response formats
+      List<dynamic> notificationsList;
+      
+      if (response.data['data'] != null) {
+        notificationsList = response.data['data'] as List;
+      } else if (response.data is List) {
+        // If response.data is directly a list
+        notificationsList = response.data as List;
+      } else if (response.data['notifications'] != null) {
+        // Alternative format
+        notificationsList = response.data['notifications'] as List;
+      } else {
+        print('⚠️ No notifications data found in response');
+        print('   Response keys: ${response.data.keys}');
+        return [];
+      }
+      
+      final notifications = notificationsList
+          .map((json) => NotificationModel.fromJson(json as Map<String, dynamic>))
           .toList();
       
       print('✅ Fetched ${notifications.length} records (notifications)');
@@ -1644,47 +1849,273 @@ class ApiService {
   Future<List<Map<String, dynamic>>> getBanners() async {
     try {
       if (kDebugMode) {
-        print('✅ Fetching banners from API');
+        // Use currentBaseUrl to show actual URL being used (may have switched to production)
+        print('✅ Fetching banners from API: ${currentBaseUrl}/banners');
+        print('   Current base URL: $_currentBaseUrl (may have auto-switched to production)');
       }
       
-      final response = await _dio.get('/banners');
+      // Use explicit endpoint path - ensure no trailing slash issues
+      // _dio uses current baseUrl which may have switched to production via auto-fallback
+      final response = await _dio.get(
+        '/banners',
+        options: Options(
+          validateStatus: (status) {
+            // Accept 200-299 and 404 (404 means no banners, not an error)
+            return status != null && (status < 300 || status == 404);
+          },
+        ),
+      );
       
-      if (response.data['success'] == true && response.data['data'] != null) {
-        final bannersList = (response.data['data'] as List)
-            .map((banner) => banner as Map<String, dynamic>)
-            .toList();
-        
-        // Filter only active banners
-        final activeBanners = bannersList.where((banner) {
-          final isActive = banner['isActive'] ?? true;
-          final imageUrl = banner['imageUrl'] ?? banner['image_url'];
-          return isActive == true && imageUrl != null && imageUrl.toString().isNotEmpty;
-        }).toList();
-        
+      if (kDebugMode) {
+        print('📦 Banner API Response Status: ${response.statusCode}');
+        print('📦 Banner API Response Data: ${response.data}');
+      }
+      
+      // Handle 404 - endpoint exists but no banners (not an error)
+      if (response.statusCode == 404) {
         if (kDebugMode) {
-          print('✅ Banners fetched: ${activeBanners.length} active banners');
-        }
-        
-        return activeBanners;
-      } else {
-        if (kDebugMode) {
-          print('⚠️ No banners in response, returning empty list');
+          print('⚠️ Banners endpoint returned 404 - no banners available');
         }
         return [];
       }
-    } catch (e) {
-      if (kDebugMode) {
-        print('❌ Error fetching banners: $e');
-        print('   Will use fallback banners');
+      
+      // Handle successful response
+      if (response.statusCode != null && response.statusCode! >= 200 && response.statusCode! < 300) {
+        // Check if response has expected structure
+        if (response.data is Map) {
+          final responseData = response.data as Map<String, dynamic>;
+          
+          // Handle both {success: true, data: [...]} and direct array responses
+          List<dynamic> bannersList = [];
+          if (responseData['success'] == true && responseData['data'] != null) {
+            bannersList = responseData['data'] as List;
+          } else if (responseData['data'] != null && responseData['data'] is List) {
+            bannersList = responseData['data'] as List;
+          } else if (response.data is List) {
+            bannersList = response.data as List;
+          }
+          
+          if (kDebugMode) {
+            print('📋 Total banners received: ${bannersList.length}');
+          }
+          
+          // Filter only active banners
+          final activeBanners = bannersList
+              .map((banner) => banner as Map<String, dynamic>)
+              .where((banner) {
+                final isActive = banner['isActive'] ?? banner['is_active'] ?? true;
+                final imageUrl = banner['imageUrl'] ?? banner['image_url'] ?? '';
+                
+                if (kDebugMode) {
+                  print('🔍 Banner check: isActive=$isActive, imageUrl=$imageUrl');
+                }
+                
+                return isActive == true && imageUrl != null && imageUrl.toString().isNotEmpty;
+              })
+              .toList();
+          
+          if (kDebugMode) {
+            print('✅ Banners fetched: ${activeBanners.length} active banners');
+            if (activeBanners.isNotEmpty) {
+              activeBanners.forEach((banner) {
+                final url = banner['imageUrl'] ?? banner['image_url'] ?? 'N/A';
+                print('   - Banner: ${banner['title'] ?? 'No title'}, URL: $url');
+              });
+            }
+          }
+          
+          return activeBanners;
+        } else {
+          if (kDebugMode) {
+            print('⚠️ Unexpected response format, returning empty list');
+            print('   Response type: ${response.data.runtimeType}');
+            print('   Response data: ${response.data}');
+          }
+          return [];
+        }
       }
-      // Return empty list on error - widget will use fallback
+      
+      // Fallback for any other status codes
+      if (kDebugMode) {
+        print('⚠️ Unexpected status code: ${response.statusCode}, returning empty list');
+      }
+      return [];
+    } catch (e) {
+      // Handle DioException specifically
+      if (e is DioException) {
+        if (kDebugMode) {
+          print('❌ DioException fetching banners:');
+          print('   Type: ${e.type}');
+          print('   Message: ${e.message}');
+          print('   Status Code: ${e.response?.statusCode}');
+          print('   Response Data: ${e.response?.data}');
+          print('   Request Path: ${e.requestOptions.path}');
+          print('   Full URL: ${e.requestOptions.uri}');
+        }
+        
+        // Check if this is a connection error and we're using local URL
+        final isConnectionError = (
+          e.type == DioExceptionType.connectionError || 
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.message?.toLowerCase().contains('connection refused') == true ||
+          e.message?.toLowerCase().contains('connection timeout') == true ||
+          e.message?.toLowerCase().contains('failed host lookup') == true ||
+          e.message?.toLowerCase().contains('connection errored') == true ||
+          e.message?.toLowerCase().contains('network is unreachable') == true ||
+          e.message?.toLowerCase().contains('socketexception') == true ||
+          e.message?.toLowerCase().contains('err_connection_refused') == true ||
+          e.message?.toLowerCase().contains('err_connection_timed_out') == true ||
+          (e.response?.statusCode == null && e.type == DioExceptionType.unknown)
+        );
+        
+        // Check if request was made to localhost (even if baseUrl already switched)
+        final requestWasToLocal = e.requestOptions.uri.toString().contains('localhost:5000') ||
+                                  e.requestOptions.baseUrl.contains('localhost:5000');
+        
+        if (kDebugMode) {
+          print('🔍 Banner auto-fallback check:');
+          print('   isConnectionError: $isConnectionError');
+          print('   _currentBaseUrl: $_currentBaseUrl');
+          print('   requestWasToLocal: $requestWasToLocal');
+          print('   Request URL: ${e.requestOptions.uri}');
+        }
+        
+        // Auto-fallback to production if local connection fails
+        // Check both: current base URL is local OR request was made to localhost
+        if (kDebugMode && isConnectionError && (_currentBaseUrl == localUrl || requestWasToLocal)) {
+          print('=' * 60);
+          print('⚠️ Banner API: Local backend connection failed!');
+          print('   Error: ${e.message}');
+          print('   🔄 Auto-switching to PRODUCTION API...');
+          print('   From: $localUrl');
+          print('   To: $productionUrl');
+          print('=' * 60);
+          
+          // Update base URL to production
+          _dio.options.baseUrl = productionUrl;
+          _currentBaseUrl = productionUrl;
+          
+          // Update token refresh interceptor base URL
+          for (var interceptor in _dio.interceptors) {
+            if (interceptor is TokenRefreshInterceptor) {
+              interceptor.setBaseUrl(productionUrl);
+            }
+          }
+          
+          // Retry the request with production URL
+          try {
+            if (kDebugMode) {
+              print('🔄 Retrying banner request with production URL: $productionUrl/banners');
+              print('   Current _dio.baseUrl: ${_dio.options.baseUrl}');
+            }
+            
+            // Use copyWith to create new request with production baseUrl (same as interceptor)
+            final retryOptions = e.requestOptions.copyWith(
+              baseUrl: productionUrl,
+              path: '/banners',
+            );
+            // Set validateStatus in RequestOptions (same pattern as interceptor)
+            retryOptions.validateStatus = (status) {
+              return status != null && (status < 300 || status == 404);
+            };
+            final retryResponse = await _dio.fetch(retryOptions);
+            
+            if (kDebugMode) {
+              print('✅ Banner request succeeded with PRODUCTION API');
+              print('   Response status: ${retryResponse.statusCode}');
+            }
+            
+            // Process the retry response the same way as original
+            if (retryResponse.statusCode == 404) {
+              return [];
+            }
+            
+            if (retryResponse.statusCode != null && retryResponse.statusCode! >= 200 && retryResponse.statusCode! < 300) {
+              if (retryResponse.data is Map) {
+                final responseData = retryResponse.data as Map<String, dynamic>;
+                List<dynamic> bannersList = [];
+                if (responseData['success'] == true && responseData['data'] != null) {
+                  bannersList = responseData['data'] as List;
+                } else if (responseData['data'] != null && responseData['data'] is List) {
+                  bannersList = responseData['data'] as List;
+                } else if (retryResponse.data is List) {
+                  bannersList = retryResponse.data as List;
+                }
+                
+                final activeBanners = bannersList
+                    .map((banner) => banner as Map<String, dynamic>)
+                    .where((banner) {
+                      final isActive = banner['isActive'] ?? banner['is_active'] ?? true;
+                      final imageUrl = banner['imageUrl'] ?? banner['image_url'] ?? '';
+                      return isActive == true && imageUrl != null && imageUrl.toString().isNotEmpty;
+                    })
+                    .toList();
+                
+                return activeBanners;
+              }
+            }
+            return [];
+          } catch (retryError) {
+            if (kDebugMode) {
+              print('❌ Banner request failed even with PRODUCTION API: $retryError');
+              if (retryError is DioException) {
+                print('   Retry Error Type: ${retryError.type}');
+                print('   Retry Error Message: ${retryError.message}');
+                print('   Retry Request URL: ${retryError.requestOptions.uri}');
+                print('   Retry Base URL: ${retryError.requestOptions.baseUrl}');
+                if (retryError.response != null) {
+                  print('   Retry Response Status: ${retryError.response?.statusCode}');
+                  print('   Retry Response Data: ${retryError.response?.data}');
+                }
+              }
+            }
+            return [];
+          }
+        }
+        
+        // Specific handling for 404
+        if (e.response?.statusCode == 404) {
+          if (kDebugMode) {
+            print('   ℹ️ 404 means banners endpoint not found or no banners available');
+            print('   This is not an error - returning empty list');
+          }
+          return [];
+        } else if (e.type == DioExceptionType.connectionTimeout ||
+                   e.type == DioExceptionType.receiveTimeout) {
+          if (kDebugMode) {
+            print('   ⚠️ Connection timeout - server may be slow or unreachable');
+          }
+        } else if (e.type == DioExceptionType.connectionError) {
+          if (kDebugMode) {
+            print('   ⚠️ Connection error - check if server is running');
+            print('   Base URL: $baseUrl');
+          }
+        }
+      } else {
+        if (kDebugMode) {
+          print('❌ Error fetching banners: $e');
+          print('   Error type: ${e.runtimeType}');
+        }
+      }
+      
+      // Return empty list on any error - widget will hide carousel gracefully
       return [];
     }
   }
 
   // ==================== ERROR HANDLING ====================
 
+  /// Handle errors and return user-friendly messages
+  /// Specifically checks for network connectivity issues
   String _handleError(dynamic error) {
+    // Check if this is a network connectivity error
+    if (NetworkUtils.isNetworkError(error)) {
+      // Return user-friendly network error message
+      return NetworkUtils.getNetworkErrorMessage(error);
+    }
+    
     if (error is DioException) {
       if (error.response != null) {
         final data = error.response!.data;
@@ -1698,26 +2129,20 @@ class ApiService {
       }
       if (error.type == DioExceptionType.connectionTimeout ||
           error.type == DioExceptionType.receiveTimeout) {
-        return 'Connection timeout. Please check your internet connection and ensure the server is running.';
+        return 'Connection Timeout\n\nPlease check your internet connection and try again.';
       }
       if (error.type == DioExceptionType.connectionError) {
+        // Network connectivity issue - show user-friendly message
         String currentBaseUrl = ApiService.baseUrl;
-        String errorMsg = 'Unable to connect to server. ';
+        String errorMsg = 'No Internet Connection\n\nPlease turn on your internet connection and try again.';
         
         if (kDebugMode) {
           if (currentBaseUrl.contains('localhost')) {
-            errorMsg += '\n\n⚠️ localhost does not work on web/mobile devices!\n';
-            errorMsg += 'Please run with: --dart-define=API_BASE_URL=http://YOUR_LOCAL_IP:5000/api\n';
-            errorMsg += 'To find your IP: Windows (ipconfig) or Mac/Linux (ifconfig)\n';
-            errorMsg += 'Example: flutter run --dart-define=API_BASE_URL=http://192.168.1.100:5000/api';
+            errorMsg += '\n\n⚠️ Debug: localhost does not work on web/mobile devices!\n';
+            errorMsg += 'Please run with: --dart-define=API_BASE_URL=http://YOUR_LOCAL_IP:5000/api';
           } else {
-            errorMsg += 'Please check:\n';
-            errorMsg += '1. Server is running at: $currentBaseUrl\n';
-            errorMsg += '2. Your internet connection\n';
-            errorMsg += '3. Firewall settings';
+            errorMsg += '\n\n⚠️ Debug: Server URL: $currentBaseUrl';
           }
-        } else {
-          errorMsg += 'Please check your internet connection and ensure the server is accessible.';
         }
         
         return errorMsg;
@@ -1728,13 +2153,11 @@ class ApiService {
   }
 }
 
-// Singleton instance - lazy initialization to prevent startup crashes
-ApiService? _apiServiceInstance;
-
+// Singleton getter - uses static instance from ApiService class
 ApiService get apiService {
-  if (_apiServiceInstance == null) {
+  if (ApiService.instance == null) {
     try {
-      _apiServiceInstance = ApiService();
+      ApiService.instance = ApiService();
     } catch (e) {
       // In release mode, if API URL is not configured, show clear error
       if (kDebugMode) {
@@ -1743,6 +2166,6 @@ ApiService get apiService {
       rethrow; // Re-throw to show error to user
     }
   }
-  return _apiServiceInstance!;
+  return ApiService.instance!;
 }
 

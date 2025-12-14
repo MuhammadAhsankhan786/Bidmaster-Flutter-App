@@ -13,6 +13,7 @@ class StorageService {
   static const String _keyUserEmail = 'user_email';
   static const String _keyReferralCode = 'user_referral_code';
   static const String _keyRewardBalance = 'user_reward_balance';
+  static const String _keyWishlist = 'wishlist';
 
   static Future<SharedPreferences> get _prefs async {
     return await SharedPreferences.getInstance();
@@ -213,6 +214,39 @@ class StorageService {
   static Future<bool> isLoggedIn() async {
     final token = await getToken();
     return token != null && token.isNotEmpty;
+  }
+
+  // Wishlist management
+  static Future<void> addToWishlist(int productId) async {
+    final prefs = await _prefs;
+    final wishlist = await getWishlist();
+    if (!wishlist.contains(productId)) {
+      wishlist.add(productId);
+      await prefs.setStringList(_keyWishlist, wishlist.map((id) => id.toString()).toList());
+    }
+  }
+
+  static Future<void> removeFromWishlist(int productId) async {
+    final prefs = await _prefs;
+    final wishlist = await getWishlist();
+    wishlist.remove(productId);
+    await prefs.setStringList(_keyWishlist, wishlist.map((id) => id.toString()).toList());
+  }
+
+  static Future<List<int>> getWishlist() async {
+    final prefs = await _prefs;
+    final wishlistStrings = prefs.getStringList(_keyWishlist) ?? [];
+    return wishlistStrings.map((id) => int.tryParse(id) ?? 0).where((id) => id > 0).toList();
+  }
+
+  static Future<bool> isInWishlist(int productId) async {
+    final wishlist = await getWishlist();
+    return wishlist.contains(productId);
+  }
+
+  static Future<void> clearWishlist() async {
+    final prefs = await _prefs;
+    await prefs.remove(_keyWishlist);
   }
 }
 

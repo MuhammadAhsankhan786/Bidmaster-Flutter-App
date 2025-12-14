@@ -8,17 +8,7 @@ import '../services/storage_service.dart';
 import '../models/product_model.dart';
 import '../models/bid_model.dart';
 import '../utils/image_url_helper.dart';
-
-// BarezBid Color Palette
-const Color _primary = Color(0xFF0A3069);
-const Color _secondary = Color(0xFF2BA8E0);
-const Color _background = Color(0xFFF5F7FA);
-const Color _cardBackground = Color(0xFFFFFFFF);
-const Color _textDark = Color(0xFF222222);
-const Color _textLight = Color(0xFF666666);
-const Color _timer = Color(0xFFFF5555);
-const Color _success = Color(0xFF27C281);
-const Color _categoryChipBg = Color(0xFFE8EDF2);
+import '../theme/colors.dart';
 
 class ProductDetailsScreen extends StatefulWidget {
   final String productId;
@@ -77,6 +67,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     return false;
   }
 
+  // Check if current user is the seller of this product
+  bool _isSellerOfProduct() {
+    if (_product == null || _userId == null) return false;
+    return _product!.sellerId == _userId;
+  }
+
   Future<void> _loadProductData() async {
     setState(() {
       _isLoading = true;
@@ -89,15 +85,17 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         throw Exception('Invalid product ID');
       }
 
-      // Load product and bids in parallel
+      // Load product, bids, and wishlist status in parallel
       final results = await Future.wait([
         apiService.getProductById(productId),
         apiService.getBidsByProduct(productId),
+        StorageService.isInWishlist(productId),
       ]);
 
       setState(() {
         _product = results[0] as ProductModel;
         _bids = results[1] as List<BidModel>;
+        _isLiked = results[2] as bool;
         _isLoading = false;
       });
     } catch (e) {
@@ -119,8 +117,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: _background,
+      backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -129,10 +128,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: _cardBackground,
+                color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
                 border: Border(
                   bottom: BorderSide(
-                    color: _categoryChipBg,
+                    color: isDark ? AppColors.slate800 : AppColors.slate200,
                     width: 1,
                   ),
                 ),
@@ -151,23 +150,33 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     },
                     icon: const Icon(Icons.arrow_back),
                     style: IconButton.styleFrom(
-                      backgroundColor: _categoryChipBg,
+                      backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
                       shape: const CircleBorder(),
                     ),
                   ),
                   const Spacer(),
                   IconButton(
-                    onPressed: () {
+                    onPressed: () async {
+                      if (_product == null) return;
+                      final productId = _product!.id;
+                      final isInWishlist = await StorageService.isInWishlist(productId);
+                      
+                      if (isInWishlist) {
+                        await StorageService.removeFromWishlist(productId);
+                      } else {
+                        await StorageService.addToWishlist(productId);
+                      }
+                      
                       setState(() {
                         _isLiked = !_isLiked;
                       });
                     },
                     icon: Icon(
                       _isLiked ? Icons.favorite : Icons.favorite_border,
-                      color: _isLiked ? _timer : _textLight,
+                      color: _isLiked ? AppColors.red600 : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
                     ),
                     style: IconButton.styleFrom(
-                      backgroundColor: _categoryChipBg,
+                      backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
                       shape: const CircleBorder(),
                     ),
                   ),
@@ -176,7 +185,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     onPressed: () {},
                     icon: const Icon(Icons.share),
                     style: IconButton.styleFrom(
-                      backgroundColor: _categoryChipBg,
+                      backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
                       shape: const CircleBorder(),
                     ),
                   ),
@@ -184,7 +193,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   if (_canEditProduct) ...[
                     const SizedBox(width: 8),
                     PopupMenuButton<String>(
-                      icon: Icon(Icons.more_vert, color: _textDark),
+                      icon: Icon(Icons.more_vert, color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -203,7 +212,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           value: 'edit',
                           child: Row(
                             children: [
-                              Icon(Icons.edit, size: 20, color: _primary),
+                              Icon(Icons.edit, size: 20, color: AppColors.primaryBlue),
                               const SizedBox(width: 12),
                               const Text('Edit Product'),
                             ],
@@ -213,9 +222,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           value: 'delete',
                           child: Row(
                             children: [
-                              Icon(Icons.delete, size: 20, color: _timer),
+                              Icon(Icons.delete, size: 20, color: AppColors.red600),
                               const SizedBox(width: 12),
-                              Text('Delete Product', style: TextStyle(color: _timer)),
+                              Text('Delete Product', style: TextStyle(color: AppColors.red600)),
                             ],
                           ),
                         ),
@@ -235,19 +244,19 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.error_outline, size: 48, color: _timer),
+                              Icon(Icons.error_outline, size: 48, color: AppColors.error),
                               const SizedBox(height: 16),
                               Text(
                                 'Failed to load product',
                                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                      color: _textDark,
+                                      color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                                     ),
                               ),
                               const SizedBox(height: 8),
                               Text(
                                 _errorMessage!,
                                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: _textLight,
+                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                     ),
                                 textAlign: TextAlign.center,
                               ),
@@ -255,8 +264,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               ElevatedButton(
                                 onPressed: _refreshData,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: _primary,
-                                  foregroundColor: _cardBackground,
+                                  backgroundColor: AppColors.primaryBlue,
+                                  foregroundColor: AppColors.cardWhite,
                                 ),
                                 child: const Text('Retry'),
                               ),
@@ -287,7 +296,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             loadingBuilder: (context, child, loadingProgress) {
                               if (loadingProgress == null) return child;
                               return Container(
-                                color: _background,
+                                color: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
                                 child: Center(
                                   child: CircularProgressIndicator(
                                     value: loadingProgress.expectedTotalBytes != null
@@ -295,15 +304,15 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                             loadingProgress.expectedTotalBytes!
                                         : null,
                                     strokeWidth: 2,
-                                    color: _primary,
+                                    color: AppColors.primaryBlue,
                                   ),
                                 ),
                               );
                             },
                             errorBuilder: (context, error, stackTrace) {
                               return Container(
-                                color: _background,
-                                child: Icon(Icons.image, size: 64, color: _textLight),
+                                color: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+                                child: Icon(Icons.image, size: 64, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
                               );
                             },
                           );
@@ -324,8 +333,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             margin: const EdgeInsets.symmetric(horizontal: 4),
                             decoration: BoxDecoration(
                               color: index == _currentImageIndex
-                                  ? _primary
-                                  : _categoryChipBg,
+                                  ? AppColors.primaryBlue
+                                  : (isDark ? AppColors.slate700 : AppColors.slate300),
                               borderRadius: BorderRadius.circular(4),
                             ),
                           ),
@@ -344,7 +353,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             _product!.title,
                             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                                   fontWeight: FontWeight.w600,
-                                  color: _textDark,
+                                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                                 ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -355,13 +364,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               if (_product!.categoryName != null)
                                 _CategoryTag(
                                   label: _product!.categoryName!,
-                                  color: _primary,
+                                  color: AppColors.primaryBlue,
                                 ),
                               if (_product!.categoryName != null)
                                 const SizedBox(width: 8),
                               _CategoryTag(
                                 label: _product!.status == 'approved' ? 'Live' : _product!.status,
-                                color: _success,
+                                color: AppColors.green600,
                               ),
                             ],
                           ),
@@ -372,7 +381,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: _cardBackground,
+                              color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: [
                                 BoxShadow(
@@ -396,7 +405,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                           'Current Bid',
                                           style: TextStyle(
                                             fontSize: 12,
-                                            color: _textLight,
+                                            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                             fontWeight: FontWeight.w400,
                                           ),
                                         ),
@@ -410,7 +419,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                               '\$',
                                               style: TextStyle(
                                                 fontSize: 14,
-                                                color: _primary,
+                                                color: AppColors.primaryBlue,
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             ),
@@ -420,7 +429,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                               style: TextStyle(
                                                 fontSize: 24,
                                                 fontWeight: FontWeight.bold,
-                                                color: _primary,
+                                                color: AppColors.primaryBlue,
                                               ),
                                             ),
                                           ],
@@ -434,7 +443,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                           'Time Left',
                                           style: TextStyle(
                                             fontSize: 12,
-                                            color: _textLight,
+                                            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                             fontWeight: FontWeight.w400,
                                           ),
                                         ),
@@ -449,7 +458,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                             'Auction ended',
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: _textLight,
+                                              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                             ),
                                           ),
                                       ],
@@ -462,14 +471,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                     Icon(
                                       Icons.trending_up,
                                       size: 16,
-                                      color: _textLight,
+                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
                                       '${_product!.totalBids ?? 0} bids',
                                       style: TextStyle(
                                         fontSize: 12,
-                                        color: _textLight,
+                                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                         fontWeight: FontWeight.w400,
                                       ),
                                     ),
@@ -477,14 +486,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                     Icon(
                                       Icons.access_time,
                                       size: 16,
-                                      color: _textLight,
+                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
                                       'Starting: \$${_formatCurrency((_product!.startingBid ?? _product!.startingPrice).toInt())}',
                                       style: TextStyle(
                                         fontSize: 12,
-                                        color: _textLight,
+                                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                         fontWeight: FontWeight.w400,
                                       ),
                                     ),
@@ -501,14 +510,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             'Seller Information',
                             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.w600,
-                                  color: _textDark,
+                                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                                 ),
                           ),
                           const SizedBox(height: 12),
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: _cardBackground,
+                              color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: [
                                 BoxShadow(
@@ -522,11 +531,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               children: [
                                 CircleAvatar(
                                   radius: 24,
-                                  backgroundColor: _categoryChipBg,
+                                  backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
                                   child: Text(
                                     _product!.sellerName?.substring(0, 1).toUpperCase() ?? 'S',
                                     style: TextStyle(
-                                      color: _primary,
+                                      color: AppColors.primaryBlue,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -544,7 +553,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                             style: TextStyle(
                                               fontSize: 14,
                                               fontWeight: FontWeight.w600,
-                                              color: _textDark,
+                                              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                                             ),
                                           ),
                                         ],
@@ -556,14 +565,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                             Icon(
                                               Icons.email,
                                               size: 12,
-                                              color: _textLight,
+                                              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                             ),
                                             const SizedBox(width: 4),
                                             Text(
                                               _product!.sellerEmail!,
                                               style: TextStyle(
                                                 fontSize: 12,
-                                                color: _textLight,
+                                                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                               ),
                                             ),
                                           ],
@@ -576,14 +585,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                               Icon(
                                                 Icons.phone,
                                                 size: 12,
-                                                color: _textLight,
+                                                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                               ),
                                               const SizedBox(width: 4),
                                               Text(
                                                 _product!.sellerPhone!,
                                                 style: TextStyle(
                                                   fontSize: 12,
-                                                  color: _textLight,
+                                                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                                 ),
                                               ),
                                             ],
@@ -596,7 +605,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   onPressed: () {},
                                   icon: const Icon(Icons.person_outline),
                                   style: IconButton.styleFrom(
-                                    backgroundColor: _categoryChipBg,
+                                    backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
                                     shape: const CircleBorder(),
                                   ),
                                 ),
@@ -611,7 +620,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             'Description',
                             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.w600,
-                                  color: _textDark,
+                                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                                 ),
                           ),
                           const SizedBox(height: 12),
@@ -619,7 +628,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             _product!.description ?? 'No description provided',
                             style: TextStyle(
                               fontSize: 14,
-                              color: _textDark,
+                              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                               height: 1.6,
                             ),
                           ),
@@ -631,7 +640,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             'Bid History',
                             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.w600,
-                                  color: _textDark,
+                                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                                 ),
                           ),
                           const SizedBox(height: 12),
@@ -642,7 +651,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 'No bids yet. Be the first to bid!',
                                 style: TextStyle(
                                   fontSize: 14,
-                                  color: _textLight,
+                                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                 ),
                                 textAlign: TextAlign.center,
                               ),
@@ -661,7 +670,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                     child: Container(
                                       padding: const EdgeInsets.all(12),
                                       decoration: BoxDecoration(
-                                        color: _cardBackground,
+                                        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
                                         borderRadius: BorderRadius.circular(12),
                                         boxShadow: [
                                           BoxShadow(
@@ -677,7 +686,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                             width: 32,
                                             height: 32,
                                             decoration: BoxDecoration(
-                                              color: _categoryChipBg,
+                                              color: isDark ? AppColors.slate800 : AppColors.slate100,
                                               shape: BoxShape.circle,
                                             ),
                                             child: Center(
@@ -686,7 +695,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                                 style: TextStyle(
                                                   fontSize: 14,
                                                   fontWeight: FontWeight.bold,
-                                                  color: _primary,
+                                                  color: AppColors.primaryBlue,
                                                 ),
                                               ),
                                             ),
@@ -702,14 +711,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                                   style: TextStyle(
                                                     fontSize: 12,
                                                     fontWeight: FontWeight.w500,
-                                                    color: _textDark,
+                                                    color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                                                   ),
                                                 ),
                                                 Text(
                                                   timeAgo,
                                                   style: TextStyle(
                                                     fontSize: 12,
-                                                    color: _textLight,
+                                                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                                   ),
                                                 ),
                                               ],
@@ -720,7 +729,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                             style: TextStyle(
                                               fontSize: 14,
                                               fontWeight: FontWeight.bold,
-                                              color: _primary,
+                                              color: AppColors.primaryBlue,
                                             ),
                                           ),
                                         ],
@@ -745,10 +754,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       bottomNavigationBar: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: _cardBackground,
+          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
           border: Border(
             top: BorderSide(
-              color: _categoryChipBg,
+              color: isDark ? AppColors.slate800 : AppColors.slate200,
               width: 1,
             ),
           ),
@@ -767,7 +776,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       context: context,
                       builder: (context) => AlertDialog(
                         title: const Text('Login Required'),
-                        content: const Text('Please login or register to place a bid.'),
+                        content: const Text('Please login first'),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(context),
@@ -781,6 +790,34 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             child: const Text('Login'),
                           ),
                         ],
+                      ),
+                    );
+                  }
+                  return;
+                }
+                
+                // Check if product is pending (not approved)
+                if (_product?.status == 'pending') {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('This product is pending admin approval. Bidding will be available once approved.'),
+                        backgroundColor: AppColors.error,
+                        duration: Duration(seconds: 3),
+                      ),
+                    );
+                  }
+                  return;
+                }
+                
+                // Check if user is the seller of this product
+                if (_isSellerOfProduct()) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('You cannot bid on your own product.'),
+                        backgroundColor: AppColors.error,
+                        duration: Duration(seconds: 3),
                       ),
                     );
                   }
@@ -823,8 +860,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 }
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: _primary,
-                foregroundColor: _cardBackground,
+                backgroundColor: AppColors.primaryBlue,
+                foregroundColor: AppColors.cardWhite,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -883,8 +920,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _timer,
-              foregroundColor: _cardBackground,
+              backgroundColor: AppColors.red600,
+              foregroundColor: AppColors.cardWhite,
             ),
             child: const Text('Delete'),
           ),
@@ -920,7 +957,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Product deleted successfully'),
-            backgroundColor: _success,
+            backgroundColor: AppColors.green600,
           ),
         );
 
@@ -938,7 +975,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to delete product: ${e.toString()}'),
-            backgroundColor: _timer,
+            backgroundColor: AppColors.red600,
           ),
         );
       }
@@ -955,14 +992,13 @@ class _CategoryTag extends StatelessWidget {
     required this.color,
   });
 
-  static const Color _categoryChipBg = Color(0xFFE8EDF2);
-
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: _categoryChipBg,
+        color: isDark ? AppColors.slate800 : AppColors.slate100,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(

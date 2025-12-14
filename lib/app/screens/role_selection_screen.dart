@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
 import '../services/storage_service.dart';
@@ -155,12 +156,37 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
       return;
     }
 
+    // Check if user is logged in before proceeding
+    final isLoggedIn = await StorageService.isLoggedIn();
+    final accessToken = await StorageService.getAccessToken();
+    
+    if (!isLoggedIn || accessToken == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please login first'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        // Redirect to login after a short delay
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            context.go('/auth');
+          }
+        });
+      }
+      return;
+    }
+
     setState(() {
       _isNavigating = true;
     });
 
-    print('🔄 Role selection: $_selectedRole');
-    print('   Updating role in database via updateProfile API...');
+    if (kDebugMode) {
+      print('🔄 Role selection: $_selectedRole');
+      print('   Updating role in database via updateProfile API...');
+    }
 
     try {
       // 🔧 FIX: Update role in database via updateProfile API
@@ -171,7 +197,9 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
       
       // 🔧 FIX: If user data is missing, try to fetch from profile endpoint
       if (userId == null || phone == null) {
-        print('⚠️ Warning: userId or phone is null, attempting to fetch from profile...');
+        if (kDebugMode) {
+          print('⚠️ Warning: userId or phone is null, attempting to fetch from profile...');
+        }
         try {
           final profile = await apiService.getProfile();
           userId = profile.id;
@@ -185,17 +213,26 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
             name: profile.name,
             email: profile.email,
           );
-          print('✅ User data fetched and saved from profile endpoint');
+          if (kDebugMode) {
+            print('✅ User data fetched and saved from profile endpoint');
+          }
         } catch (e) {
-          print('❌ Failed to fetch user profile: $e');
+          if (kDebugMode) {
+            print('❌ Failed to fetch user profile: $e');
+          }
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('User data not found. Please login again.'),
-                backgroundColor: Colors.red,
+                content: Text('Please login first'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 3),
               ),
             );
-            context.go('/auth');
+            Future.delayed(const Duration(milliseconds: 500), () {
+              if (mounted) {
+                context.go('/auth');
+              }
+            });
           }
           setState(() {
             _isNavigating = false;
@@ -206,15 +243,22 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
       
       // Final check - if still null after fetch attempt, redirect to login
       if (userId == null || phone == null) {
-        print('❌ Error: userId or phone is still null after fetch attempt');
+        if (kDebugMode) {
+          print('❌ Error: userId or phone is still null after fetch attempt');
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('User data not found. Please login again.'),
-              backgroundColor: Colors.red,
+              content: Text('Please login first'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
             ),
           );
-          context.go('/auth');
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              context.go('/auth');
+            }
+          });
         }
         setState(() {
           _isNavigating = false;
@@ -224,19 +268,25 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
 
       // Call updateProfile API to update role in database and get new tokens
       await apiService.updateProfile(role: _selectedRole!);
-      print('✅ Role updated in database via API');
-      print('✅ New tokens received and saved with role: $_selectedRole');
+      if (kDebugMode) {
+        print('✅ Role updated in database via API');
+        print('✅ New tokens received and saved with role: $_selectedRole');
+      }
 
       // Verify role was saved correctly
       final savedRole = await StorageService.getUserRole();
       final token = await StorageService.getAccessToken();
       final tokenRole = token != null ? JwtUtils.getRoleFromToken(token) : null;
       
-      print('   Verified saved role: $savedRole');
-      print('   Verified token role: $tokenRole');
+      if (kDebugMode) {
+        print('   Verified saved role: $savedRole');
+        print('   Verified token role: $tokenRole');
+      }
       
       if (savedRole != _selectedRole) {
-        print('⚠️ Warning: Saved role mismatch - retrying...');
+        if (kDebugMode) {
+          print('⚠️ Warning: Saved role mismatch - retrying...');
+        }
         // Role should have been updated by updateProfile, but verify
         await StorageService.saveUserData(
           userId: userId,
@@ -251,7 +301,9 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
       await Future.delayed(const Duration(milliseconds: 300));
 
       if (mounted) {
-        print('   Navigating to dashboard with role: $_selectedRole');
+        if (kDebugMode) {
+          print('   Navigating to dashboard with role: $_selectedRole');
+        }
         try {
           // Skip profile-setup, go directly to dashboard based on role
           if (_selectedRole == 'company_products') {
@@ -259,23 +311,51 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
           } else if (_selectedRole == 'seller_products') {
             context.go('/seller-dashboard');
           }
-          print('✅ Navigation successful');
+          if (kDebugMode) {
+            print('✅ Navigation successful');
+          }
         } catch (e) {
-          print('❌ Navigation error: $e');
+          if (kDebugMode) {
+            print('❌ Navigation error: $e');
+          }
           setState(() {
             _isNavigating = false;
           });
         }
       }
     } catch (e) {
-      print('❌ Error updating role: $e');
+      if (kDebugMode) {
+        print('❌ Error updating role: $e');
+      }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update role: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        // Check if error is due to authentication failure
+        final errorMessage = e.toString().toLowerCase();
+        if (errorMessage.contains('401') || 
+            errorMessage.contains('unauthorized') || 
+            errorMessage.contains('token') ||
+            errorMessage.contains('login') ||
+            errorMessage.contains('session expired')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please login first'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              context.go('/auth');
+            }
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to update role: ${e.toString()}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
         setState(() {
           _isNavigating = false;
         });

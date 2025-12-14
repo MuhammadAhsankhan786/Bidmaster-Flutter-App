@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../services/storage_service.dart';
 import '../services/theme_service.dart';
 import '../services/language_service.dart';
+import '../services/app_localizations.dart';
 import 'package:share_plus/share_plus.dart';
 
 class AppDrawer extends StatefulWidget {
@@ -95,8 +96,8 @@ class _AppDrawerState extends State<AppDrawer> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Not Logged In',
+                    Text(
+                      AppLocalizations.of(context)?.notLoggedIn ?? 'Not Logged In',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -105,7 +106,7 @@ class _AppDrawerState extends State<AppDrawer> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'You need to be logged in to access the full features of this app',
+                      AppLocalizations.of(context)?.loginRequired ?? 'You need to be logged in to access the full features of this app',
                       style: TextStyle(
                         fontSize: 12,
                         color: colorScheme.onSurface,
@@ -125,7 +126,7 @@ class _AppDrawerState extends State<AppDrawer> {
                   // Home
                   _DrawerMenuItem(
                     icon: Icons.home,
-                    label: 'Home',
+                    label: AppLocalizations.of(context)?.home ?? 'Home',
                     onTap: () {
                       Navigator.pop(context); // Close drawer first
                       // Use go to navigate to home (replaces current route)
@@ -133,32 +134,17 @@ class _AppDrawerState extends State<AppDrawer> {
                     },
                   ),
 
-                  // Transactions
-                  _DrawerMenuItem(
-                    icon: Icons.attach_money,
-                    label: 'Transactions',
-                    isEnabled: _isLoggedIn,
-                    onTap: _isLoggedIn
-                        ? () {
-                            Navigator.pop(context);
-                            // Navigate to transactions screen
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Transactions coming soon')),
-                            );
-                          }
-                        : null,
-                  ),
-
                   // Contact Us
                   _DrawerMenuItem(
                     icon: Icons.phone,
-                    label: 'Contact Us',
+                    label: AppLocalizations.of(context)?.contactUs ?? 'Contact Us',
                     onTap: () {
                       Navigator.pop(context);
+                      final l10n = AppLocalizations.of(context);
                       showDialog(
                         context: context,
                         builder: (context) => AlertDialog(
-                          title: const Text('Contact Us'),
+                          title: Text(l10n?.contactUs ?? 'Contact Us'),
                           content: const Text('Email: info@iqbidmaster.com\nPhone: +964 750 352 3322'),
                           actions: [
                             TextButton(
@@ -174,14 +160,15 @@ class _AppDrawerState extends State<AppDrawer> {
                   // About Us
                   _DrawerMenuItem(
                     icon: Icons.info,
-                    label: 'About Us',
+                    label: AppLocalizations.of(context)?.aboutUs ?? 'About Us',
                     onTap: () {
                       Navigator.pop(context);
+                      final l10n = AppLocalizations.of(context);
                       showDialog(
                         context: context,
                         builder: (context) => AlertDialog(
-                          title: const Text('About IQ BidMaster'),
-                          content: const Text(
+                          title: Text('${l10n?.aboutUs ?? 'About'} IQ BidMaster'),
+                          content: Text(
                             'IQ BidMaster is the first online auction platform in Iraq and Kurdistan. '
                             'It is a very developed online store where customers can buy high quality items '
                             'with real guarantee at the best prices.',
@@ -200,7 +187,7 @@ class _AppDrawerState extends State<AppDrawer> {
                   // Share this App
                   _DrawerMenuItem(
                     icon: Icons.share,
-                    label: 'Share this App',
+                    label: AppLocalizations.of(context)?.shareApp ?? 'Share this App',
                     onTap: () {
                       Navigator.pop(context);
                       _shareApp();
@@ -216,7 +203,7 @@ class _AppDrawerState extends State<AppDrawer> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Language',
+                          AppLocalizations.of(context)?.language ?? 'Language',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -278,9 +265,9 @@ class _AppDrawerState extends State<AppDrawer> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text(
-                      'Login/Sign Up',
-                      style: TextStyle(
+                    child: Text(
+                      AppLocalizations.of(context)?.loginSignUp ?? 'Login/Sign Up',
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),

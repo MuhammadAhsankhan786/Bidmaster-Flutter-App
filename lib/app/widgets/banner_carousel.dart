@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
 import '../services/api_service.dart';
 import '../utils/image_url_helper.dart';
 
@@ -14,16 +16,12 @@ class _BannerCarouselState extends State<BannerCarousel> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
   List<String> _bannerImages = [];
+  final Set<String> _failedUrls = {}; // Track failed image URLs to prevent retries
   bool _isLoading = true;
   bool _hasError = false;
 
-  // Fallback banners - Used when API fails or returns no banners
-  // These are local assets or reliable external URLs
-  final List<String> _fallbackBanners = [
-    'https://images.unsplash.com/photo-1606761568499-6d45d7a523c5?w=1920&h=600&fit=crop&q=100&auto=format',
-    'https://images.unsplash.com/photo-1556656793-08538906a9f8?w=1920&h=600&fit=crop&q=100&auto=format',
-    'https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=1920&h=600&fit=crop&q=100&auto=format',
-  ];
+  // No fallback banners - Hide carousel if no banners from API
+  // This prevents 404 errors and app hanging
 
   @override
   void initState() {
@@ -41,19 +39,38 @@ class _BannerCarouselState extends State<BannerCarousel> {
         _hasError = false;
       });
 
-      // Fetch banners from API
+      // Fetch banners from API (handles 404 and other errors gracefully)
       final banners = await apiService.getBanners();
       
       if (banners.isNotEmpty) {
-        // Extract image URLs from API response (Cloudinary URLs)
+        // Extract image URLs from API response (Cloudinary URLs or local URLs)
         final imageUrls = banners
-            .map((banner) => banner['imageUrl'] ?? banner['image_url'] ?? '')
-            .where((url) => url.toString().isNotEmpty)
-            .map((url) => ImageUrlHelper.fixImageUrl(url.toString())) // Fix URLs (handles Cloudinary & relative URLs)
+            .map((banner) {
+              // Try multiple possible field names
+              final url = banner['imageUrl'] ?? 
+                         banner['image_url'] ?? 
+                         banner['url'] ?? 
+                         '';
+              return url.toString();
+            })
             .where((url) => url.isNotEmpty)
+            .map((url) {
+              // Fix URLs (handles Cloudinary & relative URLs)
+              final fixedUrl = ImageUrlHelper.fixImageUrl(url);
+              if (kDebugMode) {
+                print('🖼️ Banner URL: $url -> $fixedUrl');
+              }
+              return fixedUrl;
+            })
+            .where((url) => url.isNotEmpty)
+            // Filter out Unsplash URLs and previously failed URLs
+            .where((url) => !url.contains('unsplash.com') && !_failedUrls.contains(url))
             .toList();
         
         if (imageUrls.isNotEmpty) {
+          if (kDebugMode) {
+            print('✅ Loaded ${imageUrls.length} banner images');
+          }
           setState(() {
             _bannerImages = imageUrls;
             _isLoading = false;
@@ -61,30 +78,57 @@ class _BannerCarouselState extends State<BannerCarousel> {
           });
           _startAutoScroll();
           return;
+        } else {
+          if (kDebugMode) {
+            print('⚠️ No valid image URLs found in banners');
+          }
+        }
+      } else {
+        if (kDebugMode) {
+          print('⚠️ No banners returned from API');
         }
       }
       
-      // If API returns empty or no images, use fallback
+      // If API returns empty or no images, hide carousel
+      if (kDebugMode) {
+        print('⚠️ No banners available - hiding carousel');
+      }
       setState(() {
-        _bannerImages = _fallbackBanners;
+        _bannerImages = [];
         _isLoading = false;
         _hasError = false;
       });
-      _startAutoScroll();
+      // Don't start auto-scroll if no banners
     } catch (e) {
-      // On error, use fallback banners
+      // On error, hide carousel gracefully (no error thrown to user)
+      if (kDebugMode) {
+        print('❌ Error loading banners: $e');
+        if (e is DioException) {
+          print('   DioException Type: ${e.type}');
+          print('   Status Code: ${e.response?.statusCode}');
+          print('   Request URL: ${e.requestOptions.uri}');
+          if (e.response?.statusCode == 404) {
+            print('   ℹ️ 404 - Banners endpoint not found or no banners available');
+            print('   This is expected if no banners are configured');
+          }
+        }
+        print('   Hiding carousel gracefully (no error shown to user)');
+      }
       setState(() {
-        _bannerImages = _fallbackBanners;
+        _bannerImages = [];
         _isLoading = false;
-        _hasError = true;
+        _hasError = false; // Don't mark as error - just no banners available
       });
-      _startAutoScroll();
+      // Don't start auto-scroll if error
     }
   }
 
   void _startAutoScroll() {
+    // Only start auto-scroll if we have banners
+    if (_bannerImages.isEmpty) return;
+    
     Future.delayed(const Duration(seconds: 2), () {
-      if (mounted && _pageController.hasClients) {
+      if (mounted && _pageController.hasClients && _bannerImages.isNotEmpty) {
         if (_currentPage < _bannerImages.length - 1) {
           _currentPage++;
         } else {
@@ -158,38 +202,74 @@ class _BannerCarouselState extends State<BannerCarousel> {
                     fit: StackFit.expand,
                     children: [
                       // Background Image - Production-ready with caching (Cloudinary support)
-                      CachedNetworkImage(
-                        imageUrl: ImageUrlHelper.fixImageUrl(_bannerImages[index]), // Ensure URL is properly formatted
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
-                        filterQuality: FilterQuality.high,
-                        memCacheWidth: 1920, // Cache at HD resolution for performance
-                        httpHeaders: const {'Accept': 'image/*'},
-                        placeholder: (context, url) => Container(
-                          width: double.infinity,
-                          height: double.infinity,
-                          color: const Color(0xFFF1F3F5),
-                          child: const Center(
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Color(0xFF0A3069),
+                      // Skip Unsplash URLs to prevent 404 errors
+                      _bannerImages[index].contains('unsplash.com')
+                          ? Container(
+                              width: double.infinity,
+                              height: double.infinity,
+                              color: const Color(0xFFF1F3F5),
+                              child: const Center(
+                                child: Icon(
+                                  Icons.image,
+                                  size: 48,
+                                  color: Color(0xFF666666),
+                                ),
+                              ),
+                            )
+                          : CachedNetworkImage(
+                              imageUrl: ImageUrlHelper.fixImageUrl(_bannerImages[index]), // Ensure URL is properly formatted
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                              filterQuality: FilterQuality.high,
+                              memCacheWidth: 1920, // Cache at HD resolution for performance
+                              httpHeaders: const {'Accept': 'image/*'},
+                              placeholder: (context, url) => Container(
+                                width: double.infinity,
+                                height: double.infinity,
+                                color: const Color(0xFFF1F3F5),
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Color(0xFF0A3069),
+                                  ),
+                                ),
+                              ),
+                              errorWidget: (context, url, error) {
+                                // Mark URL as failed and remove from list to prevent retries
+                                if (kDebugMode) {
+                                  print('❌ Banner image failed to load: $url');
+                                  print('   Removing from carousel to prevent 404 spam');
+                                }
+                                // Remove failed URL from list
+                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                  if (mounted) {
+                                    setState(() {
+                                      _failedUrls.add(url);
+                                      _bannerImages.removeWhere((u) => u == url);
+                                      // Reset page if current page is out of bounds
+                                      if (_currentPage >= _bannerImages.length && _bannerImages.isNotEmpty) {
+                                        _currentPage = _bannerImages.length - 1;
+                                      } else if (_bannerImages.isEmpty) {
+                                        _currentPage = 0;
+                                      }
+                                    });
+                                  }
+                                });
+                                return Container(
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  color: const Color(0xFFF1F3F5),
+                                  child: const Center(
+                                    child: Icon(
+                                      Icons.image,
+                                      size: 48,
+                                      color: Color(0xFF666666),
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
-                          ),
-                        ),
-                        errorWidget: (context, url, error) => Container(
-                          width: double.infinity,
-                          height: double.infinity,
-                          color: const Color(0xFFF1F3F5),
-                          child: const Center(
-                            child: Icon(
-                              Icons.image,
-                              size: 48,
-                              color: Color(0xFF666666),
-                            ),
-                          ),
-                        ),
-                      ),
                       // Gradient Overlay - App Theme Colors
                       Container(
                         decoration: BoxDecoration(

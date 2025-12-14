@@ -1,15 +1,143 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:go_router/go_router.dart';
+import '../services/storage_service.dart';
+import '../services/api_service.dart';
+import '../theme/colors.dart';
 
-class HomeHeader extends StatelessWidget {
+class HomeHeader extends StatefulWidget {
   final TextEditingController? searchController;
   final VoidCallback? onSearchSubmitted;
+  final VoidCallback? onRoleChanged;
 
   const HomeHeader({
     super.key,
     this.searchController,
     this.onSearchSubmitted,
+    this.onRoleChanged,
   });
+
+  @override
+  State<HomeHeader> createState() => _HomeHeaderState();
+}
+
+class _HomeHeaderState extends State<HomeHeader> {
+  String? _currentRole;
+  bool _isLoadingRole = true;
+  bool _isSwitchingRole = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrentRole();
+  }
+
+  Future<void> _loadCurrentRole() async {
+    final role = await StorageService.getUserRole();
+    setState(() {
+      _currentRole = role;
+      _isLoadingRole = false;
+    });
+  }
+
+  Future<void> _switchRole(String newRole) async {
+    if (_isSwitchingRole || _currentRole == newRole) return;
+
+    setState(() {
+      _isSwitchingRole = true;
+    });
+
+    try {
+      // Check token before role switch
+      final token = await StorageService.getAccessToken();
+      if (kDebugMode) {
+        print('🔄 Role switch: Checking token before update');
+        print('   Has token: ${token != null}');
+        print('   Current role: $_currentRole');
+        print('   New role: $newRole');
+      }
+      
+      if (token == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please login first'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              context.go('/auth');
+            }
+          });
+        }
+        setState(() {
+          _isSwitchingRole = false;
+        });
+        return;
+      }
+      
+      await apiService.updateProfile(role: newRole);
+      
+      // Reload role from storage after update (in case it was updated by API)
+      final updatedRole = await StorageService.getUserRole();
+      
+      setState(() {
+        _currentRole = updatedRole ?? newRole;
+        _isSwitchingRole = false;
+      });
+
+      // Notify parent to refresh products
+      widget.onRoleChanged?.call();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Role switched to ${newRole == 'seller_products' ? 'Seller Products' : 'Company Products'}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isSwitchingRole = false;
+      });
+
+      if (mounted) {
+        // Check if error is due to authentication failure
+        final errorMessage = e.toString().toLowerCase();
+        if (errorMessage.contains('401') || 
+            errorMessage.contains('unauthorized') || 
+            errorMessage.contains('token') ||
+            errorMessage.contains('login') ||
+            errorMessage.contains('session expired') ||
+            errorMessage.contains('no access token')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please login first'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              context.go('/auth');
+            }
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to switch role: ${e.toString()}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,35 +180,90 @@ class HomeHeader extends StatelessWidget {
               
               const SizedBox(width: 8),
               
-              // Logo (IQ BidMaster text + icon)
+              // Logo (Iraqi Bid text + icon)
               GestureDetector(
                 onTap: () {
                   context.go('/home');
                 },
                 child: Row(
                   children: [
-                    // Logo icon placeholder - replace with actual logo asset
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Icon(
-                        Icons.gavel,
-                        color: colorScheme.onPrimary,
-                        size: 20,
-                      ),
+                    // Logo image - Clean and professional
+                    Image.asset(
+                      'assets/images/bid-logo.jpeg',
+                      width: 45,
+                      height: 45,
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.high,
+                      errorBuilder: (context, error, stackTrace) {
+                        // Fallback to icon if image not found
+                        if (kDebugMode) {
+                          print('❌ Logo not found: assets/images/bid-logo.jpeg');
+                          print('   Error: $error');
+                        }
+                        return Container(
+                          width: 45,
+                          height: 45,
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            Icons.gavel,
+                            color: colorScheme.onPrimary,
+                            size: 26,
+                          ),
+                        );
+                      },
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'IQ BidMaster',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.primary,
-                        letterSpacing: 0.5,
+                    const SizedBox(width: 10),
+                    ShaderMask(
+                      shaderCallback: (bounds) => LinearGradient(
+                        colors: [
+                          colorScheme.primary,
+                          colorScheme.primary.withOpacity(0.8),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ).createShader(bounds),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            'IRAQI',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              letterSpacing: 1.5,
+                              shadows: [
+                                Shadow(
+                                  color: colorScheme.primary.withOpacity(0.3),
+                                  offset: const Offset(0, 1),
+                                  blurRadius: 2,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'BID',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              letterSpacing: 2.0,
+                              shadows: [
+                                Shadow(
+                                  color: colorScheme.primary.withOpacity(0.3),
+                                  offset: const Offset(0, 1),
+                                  blurRadius: 2,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -121,13 +304,138 @@ class HomeHeader extends StatelessWidget {
             ],
           ),
           
+          // Role Buttons Row (above Search Box)
+          if (!_isLoadingRole) ...[
+            const SizedBox(height: 12),
+            _RoleButtons(
+              currentRole: _currentRole,
+              isSwitching: _isSwitchingRole,
+              onRoleSelected: _switchRole,
+            ),
+          ],
+          
           // Bottom Row: Search Box
           const SizedBox(height: 12),
           _SearchBox(
-            controller: searchController,
-            onSearchSubmitted: onSearchSubmitted,
+            controller: widget.searchController,
+            onSearchSubmitted: widget.onSearchSubmitted,
           ),
         ],
+      ),
+    );
+  }
+}
+
+// Role Buttons Widget
+class _RoleButtons extends StatelessWidget {
+  final String? currentRole;
+  final bool isSwitching;
+  final Function(String) onRoleSelected;
+
+  const _RoleButtons({
+    required this.currentRole,
+    required this.isSwitching,
+    required this.onRoleSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    
+    final isCompanyActive = currentRole == 'company_products';
+    final isSellerActive = currentRole == 'seller_products';
+    
+    return Row(
+      children: [
+        // Company Product Button
+        Expanded(
+          child: _RoleButton(
+            label: 'Company Product',
+            isActive: isCompanyActive,
+            isLoading: isSwitching && !isCompanyActive,
+            onTap: () => onRoleSelected('company_products'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        // Seller Product Button
+        Expanded(
+          child: _RoleButton(
+            label: 'Seller Product',
+            isActive: isSellerActive,
+            isLoading: isSwitching && !isSellerActive,
+            onTap: () => onRoleSelected('seller_products'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// Individual Role Button
+class _RoleButton extends StatelessWidget {
+  final String label;
+  final bool isActive;
+  final bool isLoading;
+  final VoidCallback onTap;
+
+  const _RoleButton({
+    required this.label,
+    required this.isActive,
+    required this.isLoading,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    
+    return GestureDetector(
+      onTap: isLoading ? null : onTap,
+      child: Container(
+        height: 40,
+        decoration: BoxDecoration(
+          color: isActive
+              ? colorScheme.primary
+              : (isDark
+                  ? colorScheme.surfaceVariant
+                  : colorScheme.surface.withOpacity(0.7)),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isActive
+                ? colorScheme.primary
+                : colorScheme.onSurface.withOpacity(0.2),
+            width: 1,
+          ),
+        ),
+        child: Center(
+          child: isLoading
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      isActive
+                          ? colorScheme.onPrimary
+                          : colorScheme.onSurface,
+                    ),
+                  ),
+                )
+              : Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: isActive
+                        ? colorScheme.onPrimary
+                        : colorScheme.onSurface,
+                  ),
+                ),
+        ),
       ),
     );
   }

@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import '../theme/colors.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
+import '../services/app_localizations.dart';
+import '../services/referral_service.dart';
+import '../utils/network_utils.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -67,6 +70,28 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   void initState() {
     super.initState();
+    // Load pending referral code from deep link if available
+    _loadPendingReferralCode();
+  }
+
+  Future<void> _loadPendingReferralCode() async {
+    try {
+      final pendingCode = await ReferralService.getPendingReferralCode();
+      if (pendingCode != null && pendingCode.isNotEmpty) {
+        setState(() {
+          _referralCode = pendingCode;
+          _referralController.text = pendingCode;
+        });
+        if (kDebugMode) {
+          print('[REFERRAL] Loaded pending referral code from deep link: $pendingCode');
+        }
+      }
+    } catch (e) {
+      // Silently handle error - referral code is optional
+      if (kDebugMode) {
+        print('[REFERRAL] Error loading pending referral code: $e');
+      }
+    }
   }
 
   @override
@@ -86,13 +111,18 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _handlePhoneSubmit() async {
     // Validate Iraq (+964) restriction
     if (_selectedCountryCode != '+964') {
-      _showError('Invalid Country', 'Only Iraq (+964) numbers are allowed.');
+      _showError(
+        AppLocalizations.of(context)?.invalidPhone ?? 'Invalid Phone Number',
+        AppLocalizations.of(context)?.onlyIraqNumbers ?? 'Only Iraq (+964) numbers are allowed.',
+      );
       return;
     }
 
     if (!_isPhoneValid) {
-      _showError('Invalid phone number',
-          'Please enter a valid phone number');
+      _showError(
+        AppLocalizations.of(context)?.invalidPhone ?? 'Invalid Phone Number',
+        AppLocalizations.of(context)?.enterValidPhone ?? 'Please enter a valid phone number',
+      );
       return;
     }
 
@@ -134,7 +164,10 @@ class _AuthScreenState extends State<AuthScreen> {
       // Validate phone length (Iraq format: +964 + exactly 10 digits)
       final digitsAfterPrefix = normalizedPhone.substring(4); // Remove '+964'
       if (digitsAfterPrefix.length != 10) {
-        _showError('Invalid Phone Number', 'Phone number must be exactly 10 digits');
+        _showError(
+          AppLocalizations.of(context)?.invalidPhone ?? 'Invalid Phone Number',
+          AppLocalizations.of(context)?.phoneMustBe10Digits ?? 'Phone number must be exactly 10 digits',
+        );
         setState(() {
           _isLoading = false;
         });
@@ -170,20 +203,30 @@ class _AuthScreenState extends State<AuthScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('OTP sent to your phone. Please check your SMS.'),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)?.otpSentToPhone ?? 'OTP sent to your phone. Please check your SMS.'),
             backgroundColor: AppColors.info,
-            duration: Duration(seconds: 3),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
     } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error sending OTP: $e');
+      }
       setState(() {
         _isLoading = false;
       });
 
       if (mounted) {
-        String errorMsg = 'Failed to send OTP. Please try again.';
+        String errorMsg = AppLocalizations.of(context)?.failedToSendOtp ?? 'Failed to send OTP. Please try again.';
+        
+        // Check for network connectivity errors first
+        if (NetworkUtils.isNetworkError(e)) {
+          errorMsg = NetworkUtils.getNetworkErrorMessage(e);
+          _showError('No Internet Connection', errorMsg);
+          return;
+        }
         
         // Handle specific Twilio Verify errors
         if (e.toString().contains('404') || e.toString().contains('not registered')) {
@@ -192,6 +235,8 @@ class _AuthScreenState extends State<AuthScreen> {
           errorMsg = 'SMS service temporarily unavailable. Please try again later.';
         } else if (e.toString().contains('Invalid phone')) {
           errorMsg = 'Invalid phone number format. Please check and try again.';
+        } else if (e.toString().contains('No Internet Connection') || e.toString().contains('Connection Timeout')) {
+          errorMsg = e.toString();
         }
         
         _showError('OTP Error', errorMsg);
@@ -206,7 +251,10 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _handleOTPVerify() async {
     final otp = _enteredOTP;
     if (otp.length != 6) {
-      _showError('Invalid OTP', 'Please enter the 6-digit OTP');
+      _showError(
+        AppLocalizations.of(context)?.invalidOtp ?? 'Invalid OTP',
+        AppLocalizations.of(context)?.enter6DigitOtp ?? 'Please enter the 6-digit OTP',
+      );
       return;
     }
 
@@ -488,6 +536,13 @@ class _AuthScreenState extends State<AuthScreen> {
       } else {
         String errorMsg = 'Invalid OTP. Please check and try again.';
         
+        // Check for network connectivity errors first
+        if (NetworkUtils.isNetworkError(e)) {
+          errorMsg = NetworkUtils.getNetworkErrorMessage(e);
+          _showError('No Internet Connection', errorMsg);
+          return;
+        }
+        
         // Extract error message from backend response
         if (e is DioException && e.response != null) {
           final responseData = e.response?.data;
@@ -516,6 +571,8 @@ class _AuthScreenState extends State<AuthScreen> {
           errorMsg = 'Invalid OTP. Please check the code and try again.';
         } else if (e.toString().contains('Twilio') || e.toString().contains('SMS service')) {
           errorMsg = 'SMS service temporarily unavailable. Please try again later.';
+        } else if (e.toString().contains('No Internet Connection') || e.toString().contains('Connection Timeout')) {
+          errorMsg = e.toString();
         }
         
         _showError('Verification error', errorMsg);
@@ -579,6 +636,13 @@ class _AuthScreenState extends State<AuthScreen> {
       if (mounted) {
         String errorMsg = 'Failed to resend OTP. Please try again.';
         
+        // Check for network connectivity errors first
+        if (NetworkUtils.isNetworkError(e)) {
+          errorMsg = NetworkUtils.getNetworkErrorMessage(e);
+          _showError('No Internet Connection', errorMsg);
+          return;
+        }
+        
         // Handle specific Twilio Verify errors
         if (e.toString().contains('404') || e.toString().contains('not registered')) {
           errorMsg = 'Phone number not registered. Please contact administrator.';
@@ -586,6 +650,8 @@ class _AuthScreenState extends State<AuthScreen> {
           errorMsg = 'SMS service temporarily unavailable. Please try again later.';
         } else if (e.toString().contains('Invalid phone')) {
           errorMsg = 'Invalid phone number format. Please check and try again.';
+        } else if (e.toString().contains('No Internet Connection') || e.toString().contains('Connection Timeout')) {
+          errorMsg = e.toString();
         }
         
         _showError('Resend OTP Error', errorMsg);
@@ -629,24 +695,38 @@ class _AuthScreenState extends State<AuthScreen> {
               // Logo & Header
               Column(
                 children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.gavel,
-                      size: 32,
-                      color: colorScheme.onPrimary,
-                    ),
+                  Image.asset(
+                    'assets/images/bid-logo.jpeg',
+                    width: 100,
+                    height: 100,
+                    fit: BoxFit.contain,
+                    cacheWidth: 200, // Cache at higher resolution
+                    errorBuilder: (context, error, stackTrace) {
+                      // Fallback to icon if image not found
+                      if (kDebugMode) {
+                        print('❌ Logo not found: assets/images/bid-logo.jpeg');
+                        print('   Error: $error');
+                      }
+                      return Container(
+                        width: 100,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.gavel,
+                          size: 50,
+                          color: colorScheme.onPrimary,
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 24),
                   Text(
                     _currentStep == 0
-                        ? 'Welcome to IQ BidMaster'
-                        : 'Verify Your Phone',
+                        ? (AppLocalizations.of(context)?.welcome ?? 'Welcome to IQ BidMaster')
+                        : (AppLocalizations.of(context)?.verifyPhone ?? 'Verify Your Phone'),
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                           color: colorScheme.onSurface,
@@ -656,8 +736,8 @@ class _AuthScreenState extends State<AuthScreen> {
                   const SizedBox(height: 8),
                   Text(
                     _currentStep == 0
-                        ? 'Enter your phone number to get started'
-                        : 'We sent a code to $_selectedCountryCode ${_phoneController.text}',
+                        ? (AppLocalizations.of(context)?.enterPhone ?? 'Enter your phone number to get started')
+                        : '${AppLocalizations.of(context)?.otpSentMessage ?? 'We sent a code to'} $_selectedCountryCode ${_phoneController.text}',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSurface.withOpacity(0.7),
                         ),
@@ -669,7 +749,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          "Don't have an account? ",
+                          '${AppLocalizations.of(context)?.dontHaveAccount ?? "Don't have an account?"} ',
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                 color: colorScheme.onSurface.withOpacity(0.7),
                               ),
@@ -679,7 +759,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             context.push('/role-selection?mode=signup');
                           },
                           child: Text(
-                            'Sign Up',
+                            AppLocalizations.of(context)?.signUp ?? 'Sign Up',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: colorScheme.primary,
@@ -768,7 +848,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   color: colorScheme.onSurface,
                 ),
                 decoration: InputDecoration(
-                  labelText: 'Phone Number',
+                  labelText: AppLocalizations.of(context)?.phoneNumber ?? 'Phone Number',
                   labelStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
                   prefixIcon: Icon(Icons.phone, size: 20, color: colorScheme.onSurface.withOpacity(0.7)),
                   hintText: '9876543210',
@@ -823,7 +903,7 @@ class _AuthScreenState extends State<AuthScreen> {
             color: colorScheme.onSurface,
           ),
           decoration: InputDecoration(
-            labelText: 'Referral Code (Optional)',
+            labelText: AppLocalizations.of(context)?.referralCode ?? 'Referral Code (Optional)',
             labelStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.7)),
             prefixIcon: Icon(Icons.card_giftcard, size: 20, color: colorScheme.onSurface.withOpacity(0.7)),
             hintText: 'Enter referral code',
@@ -874,7 +954,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onPrimary),
                     ),
                   )
-                : const Text('Send OTP'),
+                : Text(AppLocalizations.of(context)?.sendOtp ?? 'Send OTP'),
           ),
         ),
 
@@ -905,7 +985,7 @@ class _AuthScreenState extends State<AuthScreen> {
         // OTP Input Label
         Center(
           child: Text(
-            'Enter 6-digit OTP',
+            AppLocalizations.of(context)?.enter6DigitOtp ?? 'Enter 6-digit OTP',
             style: Theme.of(context).textTheme.titleMedium,
           ),
         ),
@@ -980,7 +1060,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 style: Theme.of(context).textTheme.bodySmall,
                 children: [
                   TextSpan(
-                    text: 'Resend OTP',
+                    text: AppLocalizations.of(context)?.resendOtp ?? 'Resend OTP',
                     style: TextStyle(
                       color: AppColors.blue600,
                       fontWeight: FontWeight.bold,
@@ -1018,7 +1098,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onPrimary),
                     ),
                   )
-                : const Text('Verify & Continue'),
+                : Text(AppLocalizations.of(context)?.verify ?? 'Verify & Continue'),
           ),
         ),
 

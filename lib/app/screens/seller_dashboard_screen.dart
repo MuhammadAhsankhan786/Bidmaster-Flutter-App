@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
 import '../widgets/countdown_timer.dart';
@@ -33,21 +35,21 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         label: 'Total Earnings',
         value: '\$${_formatCurrency(totalEarnings.toInt())}',
         change: pendingProducts > 0 ? '$pendingProducts pending' : 'All approved',
-        icon: Icons.attach_money,
+        icon: Icons.account_balance_wallet_rounded,
         gradientColors: [AppColors.primaryBlue, AppColors.darkBlue],
       ),
       StatData(
         label: 'Active Listings',
         value: '$activeProducts',
         change: pendingProducts > 0 ? '$pendingProducts pending' : 'All active',
-        icon: Icons.inventory_2,
+        icon: Icons.inventory_2_rounded,
         gradientColors: [AppColors.blue500, AppColors.blue600],
       ),
       StatData(
         label: 'Total Bids',
         value: '$totalBids',
         change: 'Across all listings',
-        icon: Icons.trending_up,
+        icon: Icons.trending_up_rounded,
         gradientColors: [AppColors.lightBlue, AppColors.primaryBlue],
       ),
     ];
@@ -72,23 +74,39 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
 
     try {
       // Debug: Check logged-in user
-      final userId = await StorageService.getUserId();
-      final userRole = await StorageService.getUserRole();
-      final userPhone = await StorageService.getUserPhone();
-      print('🔍 Debug - Current User:');
-      print('   User ID: $userId');
-      print('   Role: $userRole');
-      print('   Phone: $userPhone');
+      if (kDebugMode) {
+        final userId = await StorageService.getUserId();
+        final userRole = await StorageService.getUserRole();
+        final userPhone = await StorageService.getUserPhone();
+        print('🔍 Debug - Current User:');
+        print('   User ID: $userId');
+        print('   Role: $userRole');
+        print('   Phone: $userPhone');
+      }
       
       final products = await apiService.getMyProducts();
-      print('📦 Products received: ${products.length}');
+      if (kDebugMode) {
+        print('📦 Products received: ${products.length}');
+      }
+      
+      final now = DateTime.now();
+      // Filter out expired products (auctionEndTime < now) - sellers can still see their expired products for reference
+      // But for active listings view, we filter them out
+      final activeProducts = products.where((product) {
+        if (product.auctionEndTime == null) {
+          return true; // Keep products without end time (might be pending)
+        }
+        return product.auctionEndTime!.isAfter(now); // Only show if auction hasn't ended
+      }).toList();
       
       setState(() {
-        _products = products;
+        _products = activeProducts;
         _isLoading = false;
       });
     } catch (e) {
-      print('❌ Error loading products: $e');
+      if (kDebugMode) {
+        print('❌ Error loading products: $e');
+      }
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;
@@ -136,8 +154,61 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        
+        // Show confirmation dialog before exiting
+        final shouldExit = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Exit App'),
+            content: const Text('Do you want to exit the app?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Exit'),
+              ),
+            ],
+          ),
+        );
+        
+        if (shouldExit == true && context.mounted) {
+          // Exit the app
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
       backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          if (kDebugMode) {
+            print('🔘 FAB: Add New Product clicked');
+          }
+          context.push('/product-create').then((result) {
+            print('🔘 Product creation result: $result');
+            if (result == true) {
+              // Reload products after successful creation
+              _loadProducts();
+            }
+          });
+        },
+        backgroundColor: AppColors.primaryBlue,
+        icon: const Icon(Icons.add_rounded, color: Colors.white),
+        label: const Text(
+          'Upload Product',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        tooltip: 'Upload New Product',
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -155,64 +226,132 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Row(
                     children: [
-                      Text(
-                        'Seller Dashboard',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                      // Back Button
+                      IconButton(
+                        onPressed: () {
+                          if (context.canPop()) {
+                            context.pop();
+                          } else {
+                            context.go('/home');
+                          }
+                        },
+                        icon: Icon(
+                          Icons.arrow_back_rounded,
+                          color: isDark
+                              ? AppColors.textPrimaryDark
+                              : AppColors.textPrimaryLight,
+                        ),
+                        tooltip: 'Back',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                       ),
-                      Text(
-                        'Manage your listings',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: isDark
-                                  ? AppColors.textSecondaryDark
-                                  : AppColors.textSecondaryLight,
-                            ),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Seller Dashboard',
+                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                          ),
+                          Text(
+                            'Manage your listings',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight,
+                                ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                   Row(
                     children: [
-                      IconButton(
-                        onPressed: () {
-                          context.push('/profile');
-                        },
-                        icon: const Icon(Icons.person),
-                        tooltip: 'Profile',
-                        style: IconButton.styleFrom(
-                          backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
-                          shape: const CircleBorder(),
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: isDark ? AppColors.slate800 : AppColors.slate100,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDark ? AppColors.slate700 : AppColors.slate200,
+                            width: 1,
+                          ),
+                        ),
+                        child: IconButton(
+                          onPressed: () {
+                            context.push('/profile');
+                          },
+                          icon: const Icon(Icons.person_outline_rounded),
+                          tooltip: 'Profile',
+                          iconSize: 22,
                         ),
                       ),
                       const SizedBox(width: 8),
-                      IconButton(
-                        onPressed: () {
-                          context.push('/seller/earnings');
-                        },
-                        icon: const Icon(Icons.account_balance_wallet),
-                        tooltip: 'View Earnings',
-                        style: IconButton.styleFrom(
-                          backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
-                          shape: const CircleBorder(),
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: isDark ? AppColors.slate800 : AppColors.slate100,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDark ? AppColors.slate700 : AppColors.slate200,
+                            width: 1,
+                          ),
+                        ),
+                        child: IconButton(
+                          onPressed: () {
+                            context.push('/seller/earnings');
+                          },
+                          icon: const Icon(Icons.account_balance_wallet_rounded),
+                          tooltip: 'View Earnings',
+                          iconSize: 22,
                         ),
                       ),
                       const SizedBox(width: 8),
-                      FloatingActionButton(
-                        onPressed: () {
-                          print('🔘 Add New Listing FAB clicked');
-                          context.push('/product-create').then((result) {
-                            print('🔘 Product creation result: $result');
-                            if (result == true) {
-                              // Reload products after successful creation
-                              _loadProducts();
-                            }
-                          });
-                        },
-                        backgroundColor: AppColors.blue600,
-                        child: const Icon(Icons.add, color: AppColors.cardWhite),
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryBlue,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primaryBlue.withOpacity(0.3),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              if (kDebugMode) {
+                                print('🔘 Add New Listing FAB clicked');
+                              }
+                              context.push('/product-create').then((result) {
+                                if (kDebugMode) {
+                                  print('🔘 Product creation result: $result');
+                                }
+                                if (result == true) {
+                                  // Reload products after successful creation
+                                  _loadProducts();
+                                }
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(16),
+                            child: const Icon(
+                              Icons.add_rounded,
+                              color: AppColors.cardWhite,
+                              size: 28,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -434,7 +573,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                             }
                           });
                         },
-                        icon: const Icon(Icons.add),
+                        icon: const Icon(Icons.add_rounded),
                         label: const Text('Add New Listing'),
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(
@@ -456,6 +595,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
           ],
         ),
       ),
+      ),
     );
   }
 }
@@ -473,10 +613,19 @@ class _StatCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark ? AppColors.slate700 : AppColors.slate200,
+          width: 1,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -511,17 +660,28 @@ class _StatCard extends StatelessWidget {
             ),
           ),
           Container(
-            width: 48,
-            height: 48,
+            width: 56,
+            height: 56,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: stat.gradientColors,
               ),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppColors.cardWhite.withOpacity(0.2),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: stat.gradientColors.first.withOpacity(0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-            child: Icon(stat.icon, size: 24, color: AppColors.cardWhite),
+            child: Icon(stat.icon, size: 26, color: AppColors.cardWhite),
           ),
         ],
       ),
@@ -554,10 +714,19 @@ class _ListingCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isDark ? AppColors.slate700 : AppColors.slate200,
+            width: 1,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+              spreadRadius: 0,
+            ),
+          ],
         ),
         child: Row(
           children: [
@@ -655,7 +824,7 @@ class _ListingCard extends StatelessWidget {
                             Row(
                               children: [
                                 Icon(
-                                  Icons.trending_up,
+                                  Icons.trending_up_rounded,
                                   size: 14,
                                   color: isDark
                                       ? AppColors.textSecondaryDark
@@ -705,7 +874,7 @@ class _ListingCard extends StatelessWidget {
                           onPressed: () {
                             context.go('/seller/winner/${product.id}');
                           },
-                          icon: const Icon(Icons.emoji_events, size: 16),
+                          icon: const Icon(Icons.emoji_events_rounded, size: 16),
                           label: const Text('View Winner'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.green600,
@@ -723,31 +892,59 @@ class _ListingCard extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           if (onEdit != null)
-                            IconButton(
-                              icon: const Icon(Icons.edit, size: 18),
-                              color: AppColors.blue600,
-                              onPressed: () {
-                                // Stop tap propagation
-                                if (onTap != null) {
-                                  // Don't navigate to details
-                                }
-                                onEdit?.call();
-                              },
-                              tooltip: 'Edit',
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: AppColors.blue600.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: AppColors.blue600.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: IconButton(
+                                icon: const Icon(Icons.edit_rounded, size: 18),
+                                color: AppColors.blue600,
+                                onPressed: () {
+                                  // Stop tap propagation
+                                  if (onTap != null) {
+                                    // Don't navigate to details
+                                  }
+                                  onEdit?.call();
+                                },
+                                tooltip: 'Edit',
+                                padding: EdgeInsets.zero,
+                              ),
                             ),
-                          if (onDelete != null)
-                            IconButton(
-                              icon: const Icon(Icons.delete, size: 18),
-                              color: AppColors.red600,
-                              onPressed: () {
-                                // Stop tap propagation
-                                if (onTap != null) {
-                                  // Don't navigate to details
-                                }
-                                onDelete?.call();
-                              },
-                              tooltip: 'Delete',
+                          if (onDelete != null) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: AppColors.red600.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: AppColors.red600.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: IconButton(
+                                icon: const Icon(Icons.delete_rounded, size: 18),
+                                color: AppColors.red600,
+                                onPressed: () {
+                                  // Stop tap propagation
+                                  if (onTap != null) {
+                                    // Don't navigate to details
+                                  }
+                                  onDelete?.call();
+                                },
+                                tooltip: 'Delete',
+                                padding: EdgeInsets.zero,
+                              ),
                             ),
+                          ],
                         ],
                       ),
                     ),

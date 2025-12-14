@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:app_links/app_links.dart';
@@ -9,6 +10,7 @@ import 'app/services/storage_service.dart';
 import 'app/services/referral_service.dart';
 import 'app/services/theme_service.dart';
 import 'app/services/language_service.dart';
+import 'app/services/app_localizations.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,10 +19,9 @@ void main() async {
   FlutterError.onError = (FlutterErrorDetails details) {
     if (kDebugMode) {
       FlutterError.presentError(details);
-    } else {
-      // In release mode, log error but don't crash
-      print('❌ Flutter Error: ${details.exception}');
     }
+    // In release mode, silently handle errors to prevent crashes
+    // Errors are logged internally by Flutter
   };
   
   // Handle platform errors
@@ -140,22 +141,39 @@ class _MyAppState extends State<MyApp> {
         return ValueListenableBuilder<Locale>(
           valueListenable: LanguageService.languageNotifier,
           builder: (context, locale, child) {
-            return MaterialApp.router(
-              title: 'IQ BidMaster',
-              theme: AppTheme.lightTheme,
-              darkTheme: AppTheme.darkTheme,
-              themeMode: themeMode,
-              locale: locale,
-              supportedLocales: const [
-                Locale('en', 'US'), // English
-                Locale('ar', 'IQ'), // Arabic
-                Locale('ku', 'IQ'), // Kurdish
-              ],
-              localizationsDelegates: const [
-                DefaultMaterialLocalizations.delegate,
-                DefaultWidgetsLocalizations.delegate,
-              ],
-              routerConfig: AppRouter.router,
+            // Determine text direction based on locale
+            final textDirection = locale.languageCode == 'ar' 
+                ? TextDirection.rtl 
+                : TextDirection.ltr;
+            
+            // For Kurdish, use English locale for Material widgets (since Flutter doesn't support Kurdish)
+            // Our AppLocalizations will still use Kurdish via LanguageService
+            final materialLocale = locale.languageCode == 'ku' 
+                ? const Locale('en', 'US') 
+                : locale;
+            
+            return Directionality(
+              textDirection: textDirection,
+              child: MaterialApp.router(
+                title: 'IQ BidMaster',
+                theme: AppTheme.lightTheme,
+                darkTheme: AppTheme.darkTheme,
+                themeMode: themeMode,
+                locale: materialLocale, // Use English for Kurdish to avoid MaterialLocalizations errors
+                supportedLocales: const [
+                  Locale('en', 'US'), // English
+                  Locale('ar', 'IQ'), // Arabic (RTL)
+                  // Note: Kurdish (ku_IQ) not in supportedLocales for Material widgets
+                  // but our AppLocalizations still supports it
+                ],
+                localizationsDelegates: const [
+                  AppLocalizations.delegate,
+                  GlobalMaterialLocalizations.delegate,
+                  GlobalWidgetsLocalizations.delegate,
+                  GlobalCupertinoLocalizations.delegate,
+                ],
+                routerConfig: AppRouter.router,
+              ),
             );
           },
         );

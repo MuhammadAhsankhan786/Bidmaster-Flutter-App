@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
+import 'package:dio/dio.dart';
 import '../theme/colors.dart';
 import '../services/api_service.dart';
+import '../services/storage_service.dart';
+import '../utils/network_utils.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -19,6 +22,7 @@ class _WalletScreenState extends State<WalletScreen> {
   @override
   void initState() {
     super.initState();
+    // Load wallet data immediately - ensures wallet opens properly
     _loadWalletData();
   }
 
@@ -28,16 +32,55 @@ class _WalletScreenState extends State<WalletScreen> {
       _errorMessage = null;
     });
 
+    // Check if user is logged in
+    final isLoggedIn = await StorageService.isLoggedIn();
+    final accessToken = await StorageService.getAccessToken();
+    
+    if (!isLoggedIn || accessToken == null) {
+      setState(() {
+        _errorMessage = 'Please login first';
+        _isLoading = false;
+      });
+      // Redirect to login after a delay
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          context.go('/auth');
+        }
+      });
+      return;
+    }
+
     try {
       final response = await apiService.getWallet();
+      
+      // Handle different response formats
       if (response['success'] == true) {
-        setState(() {
-          _walletData = response['data'];
-          _isLoading = false;
-        });
+        // Check if data exists
+        if (response['data'] != null) {
+          setState(() {
+            _walletData = response['data'] as Map<String, dynamic>;
+            _isLoading = false;
+          });
+        } else {
+          // If success but no data, initialize with empty structure
+          setState(() {
+            _walletData = {
+              'total_balance': 0.0,
+              'breakdown': {
+                'referral_rewards': 0.0,
+                'seller_earnings': 0.0,
+                'pending_earnings': 0.0,
+              },
+              'transactions': <Map<String, dynamic>>[],
+            };
+            _isLoading = false;
+          });
+        }
       } else {
+        // Handle error response
+        final errorMsg = response['message'] ?? response['error'] ?? 'Failed to load wallet data';
         setState(() {
-          _errorMessage = response['message'] ?? 'Failed to load wallet data';
+          _errorMessage = errorMsg.toString();
           _isLoading = false;
         });
       }
@@ -45,11 +88,48 @@ class _WalletScreenState extends State<WalletScreen> {
       if (kDebugMode) {
         print('[Wallet] Error loading wallet data: $e');
       }
+      
+      // Check for network errors
+      String errorMsg = 'Failed to load wallet data';
+      if (NetworkUtils.isNetworkError(e)) {
+        errorMsg = NetworkUtils.getNetworkErrorMessage(e);
+      } else if (e is DioException) {
+        if (e.response != null) {
+          final data = e.response?.data;
+          if (data is Map && data.containsKey('message')) {
+            errorMsg = data['message'] as String;
+          } else if (e.response?.statusCode == 401) {
+            errorMsg = 'Please login first';
+            Future.delayed(const Duration(milliseconds: 500), () {
+              if (mounted) {
+                context.go('/auth');
+              }
+            });
+          } else {
+            errorMsg = 'Server error: ${e.response?.statusCode}';
+          }
+        } else {
+          errorMsg = e.message ?? 'Network error occurred';
+        }
+      } else {
+        errorMsg = e.toString();
+      }
+      
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = errorMsg;
         _isLoading = false;
       });
     }
+  }
+
+  double _safeGetDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    if (value is String) {
+      final parsed = double.tryParse(value);
+      return parsed ?? 0.0;
+    }
+    return 0.0;
   }
 
   String _formatCurrency(double amount) {
@@ -89,9 +169,10 @@ class _WalletScreenState extends State<WalletScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    try {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
+      return Scaffold(
       backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
       appBar: AppBar(
         title: const Text('Wallet'),
@@ -110,26 +191,69 @@ class _WalletScreenState extends State<WalletScreen> {
           ? const Center(child: CircularProgressIndicator())
           : _errorMessage != null
               ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline, size: 48, color: AppColors.error),
-                      const SizedBox(height: 16),
-                      Text(
-                        _errorMessage!,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _loadWalletData,
-                        child: const Text('Retry'),
-                      ),
-                    ],
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error_outline, size: 64, color: AppColors.error),
+                        const SizedBox(height: 24),
+                        Text(
+                          'Error',
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          _errorMessage!,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton.icon(
+                          onPressed: _loadWalletData,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                        if (_errorMessage!.contains('login') || _errorMessage!.contains('Login'))
+                          const SizedBox(height: 16),
+                        if (_errorMessage!.contains('login') || _errorMessage!.contains('Login'))
+                          TextButton(
+                            onPressed: () {
+                              context.go('/auth');
+                            },
+                            child: const Text('Go to Login'),
+                          ),
+                      ],
+                    ),
                   ),
                 )
               : _walletData == null
-                  ? const Center(child: Text('No wallet data'))
+                  ? Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.account_balance_wallet, size: 64, color: AppColors.slate400),
+                            SizedBox(height: 16),
+                            Text('No wallet data available'),
+                            SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: () => _loadWalletData(),
+                              child: Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
                   : RefreshIndicator(
                       onRefresh: _loadWalletData,
                       child: SingleChildScrollView(
@@ -157,7 +281,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    '\$${_formatCurrency(_walletData!['total_balance'] ?? 0.0)}',
+                                    '\$${_formatCurrency((_walletData?['total_balance'] ?? 0.0) is num ? (_walletData!['total_balance'] as num).toDouble() : 0.0)}',
                                     style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                                           color: AppColors.cardWhite,
                                           fontWeight: FontWeight.bold,
@@ -169,18 +293,18 @@ class _WalletScreenState extends State<WalletScreen> {
                                     children: [
                                       _BalanceItem(
                                         label: 'Referral',
-                                        amount: _walletData!['breakdown']?['referral_rewards'] ?? 0.0,
+                                        amount: _safeGetDouble(_walletData?['breakdown']?['referral_rewards']),
                                         color: AppColors.green500,
                                       ),
                                       _BalanceItem(
                                         label: 'Earnings',
-                                        amount: _walletData!['breakdown']?['seller_earnings'] ?? 0.0,
+                                        amount: _safeGetDouble(_walletData?['breakdown']?['seller_earnings']),
                                         color: AppColors.yellow500,
                                       ),
-                                      if ((_walletData!['breakdown']?['pending_earnings'] ?? 0.0) > 0)
+                                      if (_safeGetDouble(_walletData?['breakdown']?['pending_earnings']) > 0)
                                         _BalanceItem(
                                           label: 'Pending',
-                                          amount: _walletData!['breakdown']?['pending_earnings'] ?? 0.0,
+                                          amount: _safeGetDouble(_walletData?['breakdown']?['pending_earnings']),
                                           color: AppColors.yellow600,
                                         ),
                                     ],
@@ -200,7 +324,7 @@ class _WalletScreenState extends State<WalletScreen> {
                             ),
                             const SizedBox(height: 12),
 
-                            if ((_walletData!['transactions'] as List?)?.isEmpty ?? true)
+                            if ((_walletData?['transactions'] as List?)?.isEmpty ?? true)
                               Card(
                                 child: Padding(
                                   padding: const EdgeInsets.all(32.0),
@@ -217,7 +341,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                 ),
                               )
                             else
-                              ...((_walletData!['transactions'] as List?) ?? []).map((transaction) {
+                              ...((_walletData?['transactions'] as List?) ?? []).map((transaction) {
                                 final type = transaction['transaction_type'] ?? 'unknown';
                                 final amount = (transaction['amount'] ?? 0.0).toDouble();
                                 final date = transaction['transaction_date'] ?? '';
@@ -279,7 +403,108 @@ class _WalletScreenState extends State<WalletScreen> {
                         ),
                       ),
                     ),
-    );
+      );
+    } catch (e) {
+      // Fallback UI if build fails - prevents white screen
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Wallet'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/home');
+              }
+            },
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 64, color: AppColors.error),
+                const SizedBox(height: 16),
+                const Text(
+                  'Error loading wallet',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Please try again',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _isLoading = true;
+                      _errorMessage = null;
+                      _walletData = null;
+                    });
+                    _loadWalletData();
+                  },
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+                      ),
+                    ),
+      );
+    } catch (e) {
+      // Fallback UI if build fails - prevents white screen
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Wallet'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/home');
+              }
+            },
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 64, color: AppColors.error),
+                const SizedBox(height: 16),
+                const Text(
+                  'Error loading wallet',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Please try again',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _isLoading = true;
+                      _errorMessage = null;
+                      _walletData = null;
+                    });
+                    _loadWalletData();
+                  },
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
   }
 }
 

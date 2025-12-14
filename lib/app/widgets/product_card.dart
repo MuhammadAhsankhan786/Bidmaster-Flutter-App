@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../utils/image_url_helper.dart';
+import '../theme/colors.dart';
 
 class ProductCard extends StatefulWidget {
   final String id;
@@ -33,13 +34,33 @@ class _ProductCardState extends State<ProductCard> {
   Timer? _timer;
   Duration _remaining = Duration.zero;
 
-  // BestBid Color Palette
-  static const Color _cardBackground = Color(0xFFFFFFFF);
-  static const Color _textDark = Color(0xFF222222);
-  static const Color _textLight = Color(0xFF666666);
-  static const Color _primary = Color(0xFF0A3069);
-  static const Color _imagePlaceholder = Color(0xFFF1F3F5);
-  static const Color _timerBg = Color(0xFFFF5555);
+  // Theme-based colors - will adapt to light/dark mode
+  static Color _cardBackground(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark ? AppColors.surfaceDark : AppColors.surfaceLight;
+  }
+  
+  static Color _textDark(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight;
+  }
+  
+  static Color _textLight(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+  }
+  
+  static Color _primary(BuildContext context) {
+    return AppColors.primaryBlue;
+  }
+  
+  static Color _imagePlaceholder(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark ? AppColors.slate800 : AppColors.slate100;
+  }
+  
+  // Green timer button (consistent across themes)
+  static const Color _timerBg = Color(0xFF4CAF50);
   static const Color _timerText = Color(0xFFFFFFFF);
 
   @override
@@ -106,17 +127,12 @@ class _ProductCardState extends State<ProductCard> {
       return '00h 00m 00s';
     }
 
-    final days = _remaining.inDays;
     final hours = _remaining.inHours % 24;
     final minutes = _remaining.inMinutes % 60;
     final seconds = _remaining.inSeconds % 60;
 
-    // Digital format: 00h 00m 00s
-    if (days > 0) {
-      return '${days.toString().padLeft(2, '0')}d ${hours.toString().padLeft(2, '0')}h ${minutes.toString().padLeft(2, '0')}m';
-    } else {
-      return '${hours.toString().padLeft(2, '0')}h ${minutes.toString().padLeft(2, '0')}m ${seconds.toString().padLeft(2, '0')}s';
-    }
+    // Digital format: 02h 52m 15s (matches screenshot exactly - hours, minutes, seconds)
+    return '${hours.toString().padLeft(2, '0')}h ${minutes.toString().padLeft(2, '0')}m ${seconds.toString().padLeft(2, '0')}s';
   }
 
   @override
@@ -125,193 +141,135 @@ class _ProductCardState extends State<ProductCard> {
       onTap: widget.onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: _cardBackground,
+          color: _cardBackground(context),
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 16,
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.black.withOpacity(0.3)
+                  : Colors.black.withOpacity(0.08),
+              blurRadius: 12,
               offset: const Offset(0, 2),
+              spreadRadius: 0,
             ),
           ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.start,
           children: [
-            // Image Container with Timer Badge INSIDE (top-right)
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(12),
-                  ),
-                    child: AspectRatio(
-                    aspectRatio: 1,
-                    child: widget.imageUrl.isNotEmpty
-                        ? Image.network(
-                            ImageUrlHelper.fixImageUrl(widget.imageUrl),
-                            // Ensure proper headers for HTTPS
-                            headers: const {'Accept': 'image/*'},
-                            fit: BoxFit.cover,
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Container(
-                                color: _imagePlaceholder,
-                                child: Center(
-                                  child: CircularProgressIndicator(
-                                    value: loadingProgress.expectedTotalBytes != null
-                                        ? loadingProgress.cumulativeBytesLoaded /
-                                            loadingProgress.expectedTotalBytes!
-                                        : null,
-                                    strokeWidth: 2,
-                                    color: _primary,
-                                  ),
-                                ),
-                              );
-                            },
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                color: _imagePlaceholder,
-                                child: const Center(
-                                  child: Icon(
-                                    Icons.image,
-                                    size: 32,
-                                    color: _textLight,
-                                  ),
-                                ),
-                              );
-                            },
-                          )
-                        : Container(
-                            color: _imagePlaceholder,
-                            child: const Center(
+            // Image Container - Clean image without overlays
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(12),
+              ),
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: widget.imageUrl.isNotEmpty
+                    ? Image.network(
+                        ImageUrlHelper.fixImageUrl(widget.imageUrl),
+                        // Ensure proper headers for HTTPS
+                        headers: const {'Accept': 'image/*'},
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(
+                            color: _imagePlaceholder(context),
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                value: loadingProgress.expectedTotalBytes != null
+                                    ? loadingProgress.cumulativeBytesLoaded /
+                                        loadingProgress.expectedTotalBytes!
+                                    : null,
+                                strokeWidth: 2,
+                                color: _primary(context),
+                              ),
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            color: _imagePlaceholder(context),
+                            child: Center(
                               child: Icon(
                                 Icons.image,
                                 size: 32,
-                                color: _textLight,
+                                color: _textLight(context),
                               ),
                             ),
+                          );
+                        },
+                      )
+                    : Container(
+                        color: _imagePlaceholder(context),
+                        child: Center(
+                          child: Icon(
+                            Icons.image,
+                            size: 32,
+                            color: _textLight(context),
                           ),
-                  ),
-                ),
-                // Timer Badge - INSIDE image (top-right) - BestBid style
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: _timerBg,
-                      borderRadius: BorderRadius.circular(6),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
                         ),
-                      ],
-                    ),
-                    child: Text(
-                      _formatTimer(),
-                      style: const TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                        color: _timerText,
                       ),
-                    ),
-                  ),
+              ),
+            ),
+            
+            // Title - Below image
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+              child: Text(
+                widget.title,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: _textDark(context),
+                  height: 1.3,
                 ),
-              ],
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
 
-            // Bottom Container - Title, Price, Heart, Auction end text
-            Flexible(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Title - Bold, Max 2 lines, #222
-                    Flexible(
-                      flex: 1,
-                      child: Text(
-                        widget.title,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: _textDark,
-                          height: 1.1,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+            // Timer and Price Badges - Below title
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Timer Badge - Green style
+                  Container(
+                    padding: const EdgeInsets.only(left: 12, right: 12, top: 7.5, bottom: 7.5),
+                    decoration: BoxDecoration(
+                      color: _timerBg, // Green color
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      _formatDigitalTimer(),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: _timerText,
+                        letterSpacing: 0.3,
                       ),
                     ),
-
-                    const SizedBox(height: 4),
-
-                    // Timer and Price Row - Side by side badges
-                    Row(
-                      children: [
-                        // Timer Badge - Red with white text
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: _timerBg,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            _formatDigitalTimer(),
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: _timerText,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(width: 6),
-
-                        // Price Badge - Grey with black text
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE5E5E5), // Light grey
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            '${_formatCurrency(widget.currentBid)} \$',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: _textDark,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-
-                        const Spacer(),
-
-                        // Heart icon
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _isFavorite = !_isFavorite;
-                            });
-                          },
-                          child: Icon(
-                            _isFavorite ? Icons.favorite : Icons.favorite_border,
-                            size: 16,
-                            color: _isFavorite ? _timerBg : _textLight,
-                          ),
-                        ),
-                      ],
+                  ),
+                  // Price Badge - Grey style
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.slate300,
+                      borderRadius: BorderRadius.circular(6),
                     ),
-                  ],
-                ),
+                    child: Text(
+                      '${widget.currentBid} \$',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimaryLight,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -321,9 +279,7 @@ class _ProductCardState extends State<ProductCard> {
   }
 
   String _formatCurrency(int amount) {
-    if (amount >= 1000) {
-      return '${(amount / 1000).toStringAsFixed(1)}K';
-    }
+    // Simple format - just return the number (matches screenshot style)
     return amount.toString();
   }
 }

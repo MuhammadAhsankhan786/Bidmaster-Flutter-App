@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/colors.dart';
 
 class CategoryChips extends StatelessWidget {
   final List<String> categories;
@@ -12,15 +13,9 @@ class CategoryChips extends StatelessWidget {
     required this.onCategorySelected,
   });
 
-  // BestBid Color Palette
-  static const Color _primary = Color(0xFF0A3069);
-  static const Color _cardBackground = Color(0xFFFFFFFF);
-  static const Color _borderColor = Color(0xFFDDDDDD);
-  static const Color _selectedBorderColor = Color(0xFF0A3069);
-
   void _showCategoryDropdown(BuildContext context) {
-    // Get all categories except 'All'
-    final categoryList = categories.where((cat) => cat != 'All').toList();
+    // Show all categories including 'All'
+    final categoryList = categories.toList();
     
     if (categoryList.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -33,10 +28,16 @@ class CategoryChips extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: _cardBackground,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
+        ),
+        decoration: BoxDecoration(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? AppColors.surfaceDark
+              : AppColors.surfaceLight,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -58,18 +59,20 @@ class CategoryChips extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Select Category',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: _primary,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),
                     onPressed: () => Navigator.pop(context),
-                    color: _textLight,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
                   ),
                 ],
               ),
@@ -85,18 +88,23 @@ class CategoryChips extends StatelessWidget {
                 itemBuilder: (context, index) {
                   final category = categoryList[index];
                   final isSelected = selectedCategory == category;
+                  final isAllCategory = category == 'All';
                   
                   return ListTile(
                     title: Text(
-                      category,
+                      isAllCategory ? 'All Products' : category,
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                        color: isSelected ? _primary : _textDark,
+                        color: isSelected 
+                            ? Theme.of(context).colorScheme.primary
+                            : (Theme.of(context).brightness == Brightness.dark
+                                ? AppColors.textPrimaryDark
+                                : AppColors.textPrimaryLight),
                       ),
                     ),
                     trailing: isSelected
-                        ? const Icon(Icons.check, color: _primary, size: 20)
+                        ? Icon(Icons.check, color: Theme.of(context).colorScheme.primary, size: 20)
                         : null,
                     onTap: () {
                       onCategorySelected(category);
@@ -114,11 +122,11 @@ class CategoryChips extends StatelessWidget {
     );
   }
 
-  static const Color _textDark = Color(0xFF222222);
-  static const Color _textLight = Color(0xFF666666);
-
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
+    
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: SingleChildScrollView(
@@ -142,10 +150,12 @@ class CategoryChips extends StatelessWidget {
                 margin: const EdgeInsets.only(right: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: _cardBackground,
+                  color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: isSelected ? _selectedBorderColor : _borderColor,
+                    color: isSelected 
+                        ? colorScheme.primary 
+                        : (isDark ? AppColors.slate700 : AppColors.slate300),
                     width: isSelected ? 2 : 1,
                   ),
                 ),
@@ -156,7 +166,7 @@ class CategoryChips extends StatelessWidget {
                       isAllCategory ? 'All Products' : category,
                       style: TextStyle(
                         fontSize: 13,
-                        color: _primary,
+                        color: colorScheme.primary,
                         fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                       ),
                     ),
@@ -165,7 +175,7 @@ class CategoryChips extends StatelessWidget {
                       Icon(
                         Icons.arrow_drop_down,
                         size: 18,
-                        color: _primary,
+                        color: colorScheme.primary,
                       ),
                     ],
                   ],

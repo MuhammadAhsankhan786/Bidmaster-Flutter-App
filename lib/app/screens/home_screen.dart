@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/home_header.dart';
 import '../widgets/banner_carousel.dart';
@@ -8,6 +9,9 @@ import '../widgets/product_card.dart';
 import '../widgets/app_drawer.dart';
 import '../services/api_service.dart';
 import '../models/product_model.dart';
+import '../services/app_localizations.dart';
+import '../services/storage_service.dart';
+import '../theme/colors.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _errorMessage;
   int _currentPage = 1;
   bool _hasMore = true;
+  String? _currentUserRole; // Track current user role
 
   // Categories loaded from API
   List<String> _categories = ['All']; // 'All' is always available, rest loaded from API
@@ -39,9 +44,17 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _loadUserRole();
     _loadCategories();
     _loadProducts();
     _searchController.addListener(_onSearchChanged);
+  }
+
+  Future<void> _loadUserRole() async {
+    final role = await StorageService.getUserRole();
+    setState(() {
+      _currentUserRole = role;
+    });
   }
 
   Future<void> _loadCategories() async {
@@ -93,26 +106,68 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      final result = await apiService.getAllProducts(
-        category: _selectedCategory == 'All' ? null : _selectedCategory,
-        search: _searchController.text.isEmpty ? null : _searchController.text,
-        page: _currentPage,
-        limit: 20,
-      );
-
-      final newProducts = result['products'] as List<ProductModel>;
-      final pagination = result['pagination'] as Map<String, dynamic>;
-
+      // Check user role to determine which products to load
+      final userRole = await StorageService.getUserRole();
+      
+      // Update current role state
       setState(() {
-        if (reset) {
-          _products = newProducts;
-        } else {
-          _products.addAll(newProducts);
-        }
-        _currentPage = pagination['page'] as int;
-        _hasMore = _currentPage < (pagination['pages'] as int);
-        _isLoading = false;
+        _currentUserRole = userRole;
       });
+      
+      if (userRole == 'seller_products') {
+        // Seller role: Show seller's own products (getMyProducts)
+        final myProducts = await apiService.getMyProducts();
+        
+        setState(() {
+          if (reset) {
+            _products = myProducts;
+          } else {
+            _products.addAll(myProducts);
+          }
+          _hasMore = false; // getMyProducts doesn't have pagination
+          _isLoading = false;
+        });
+      } else {
+        // Company/Buyer role: Show all products (getAllProducts)
+        final result = await apiService.getAllProducts(
+          category: _selectedCategory == 'All' ? null : _selectedCategory,
+          search: _searchController.text.isEmpty ? null : _searchController.text,
+          page: _currentPage,
+          limit: 20,
+        );
+
+        final newProducts = result['products'] as List<ProductModel>;
+        final pagination = result['pagination'] as Map<String, dynamic>;
+        
+        // Get current user ID to filter out their own seller products when viewing as company_products
+        final currentUserId = await StorageService.getUserId();
+
+        setState(() {
+          if (reset) {
+            // Filter: When viewing as company_products, exclude products created by current user (if they're also a seller)
+            // This ensures same product doesn't appear in both lists
+            _products = newProducts.where((product) {
+              // If user has seller products, exclude their own products from company view
+              if (currentUserId != null && product.sellerId == currentUserId) {
+                return false; // Don't show seller's own products in company products view
+              }
+              return true;
+            }).toList();
+          } else {
+            // Same filter for pagination
+            final filtered = newProducts.where((product) {
+              if (currentUserId != null && product.sellerId == currentUserId) {
+                return false;
+              }
+              return true;
+            }).toList();
+            _products.addAll(filtered);
+          }
+          _currentPage = pagination['page'] as int;
+          _hasMore = _currentPage < (pagination['pages'] as int);
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       setState(() {
         _errorMessage = e.toString();
@@ -122,8 +177,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<ProductModel> get _filteredProducts {
-    // Backend already filters by category and search, but we can do client-side filtering if needed
-    return _products;
+    final now = DateTime.now();
+    // Filter out products where bidding has ended (auctionEndTime < now)
+    return _products.where((product) {
+      if (product.auctionEndTime == null) {
+        // If no end time, keep the product (might be pending)
+        return true;
+      }
+      // Only show products where auction hasn't ended yet
+      return product.auctionEndTime!.isAfter(now);
+    }).toList();
   }
 
   @override
@@ -166,7 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: isDark ? Colors.grey[700] : Colors.grey[300],
+                color: isDark ? AppColors.slate700 : AppColors.slate300,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -178,7 +241,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Select Category',
+                    AppLocalizations.of(context)?.selectCategory ?? 'Select Category',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -207,7 +270,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   
                   return ListTile(
                     title: Text(
-                      category == 'All' ? 'All Products' : category,
+                      category == 'All' 
+                          ? (AppLocalizations.of(context)?.allProducts ?? 'All Products')
+                          : category,
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
@@ -239,9 +304,48 @@ class _HomeScreenState extends State<HomeScreen> {
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        
+        // Show confirmation dialog before exiting
+        final shouldExit = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Exit App'),
+            content: const Text('Do you want to exit the app?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Exit'),
+              ),
+            ],
+          ),
+        );
+        
+        if (shouldExit == true && context.mounted) {
+          // Exit the app
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       drawer: const AppDrawer(),
+      floatingActionButton: _currentUserRole == 'seller_products'
+          ? FloatingActionButton(
+              onPressed: () {
+                context.push('/product-create');
+              },
+              backgroundColor: colorScheme.primary,
+              child: const Icon(Icons.add_rounded, color: Colors.white),
+              tooltip: 'Add Product',
+            )
+          : null,
       body: SafeArea(
         child: Column(
           children: [
@@ -249,6 +353,11 @@ class _HomeScreenState extends State<HomeScreen> {
             HomeHeader(
               searchController: _searchController,
               onSearchSubmitted: () => _loadProducts(reset: true),
+              onRoleChanged: () {
+                // Refresh products and role when role changes
+                _loadUserRole();
+                _loadProducts(reset: true);
+              },
             ),
 
             // Content
@@ -258,16 +367,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Banner Carousel
-                    const BannerCarousel(),
+                    // Banner Carousel (only for buyer/company role)
+                    if (_currentUserRole != 'seller_products')
+                      const BannerCarousel(),
 
-                    // Category Filter Chips
-                    CategoryChips(
-                      key: _categoryKey,
-                      categories: _categories,
-                      selectedCategory: _selectedCategory,
-                      onCategorySelected: _onCategorySelected,
-                    ),
+                    // Category Filter Chips (only for buyer/company role)
+                    if (_currentUserRole != 'seller_products')
+                      CategoryChips(
+                        key: _categoryKey,
+                        categories: _categories,
+                        selectedCategory: _selectedCategory,
+                        onCategorySelected: _onCategorySelected,
+                      ),
 
                     const SizedBox(height: 16),
 
@@ -314,7 +425,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         backgroundColor: colorScheme.primary,
                                         foregroundColor: colorScheme.onPrimary,
                                       ),
-                                      child: const Text('Retry'),
+                                      child: Text(AppLocalizations.of(context)?.retry ?? 'Retry'),
                                     ),
                                   ],
                                 ),
@@ -326,22 +437,47 @@ class _HomeScreenState extends State<HomeScreen> {
                                 padding: const EdgeInsets.all(32.0),
                                 child: Column(
                                   children: [
-                                    Icon(Icons.inbox_outlined, size: 48, color: colorScheme.onSurface.withOpacity(0.6)),
+                                    Icon(
+                                      _currentUserRole == 'seller_products' 
+                                          ? Icons.inventory_2_outlined 
+                                          : Icons.inbox_outlined,
+                                      size: 48,
+                                      color: colorScheme.onSurface.withOpacity(0.6),
+                                    ),
                                     const SizedBox(height: 16),
                                     Text(
-                                      'No products found',
+                                      _currentUserRole == 'seller_products'
+                                          ? 'No products yet'
+                                          : (AppLocalizations.of(context)?.noProductsFound ?? 'No products found'),
                                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                             color: colorScheme.onSurface,
                                           ),
                                     ),
                                     const SizedBox(height: 8),
                                     Text(
-                                      'Try adjusting your search or filters',
+                                      _currentUserRole == 'seller_products'
+                                          ? 'Create your first product to start selling'
+                                          : (AppLocalizations.of(context)?.tryAdjustingSearch ?? 'Try adjusting your search or filters'),
                                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                             color: colorScheme.onSurface.withOpacity(0.7),
                                           ),
                                       textAlign: TextAlign.center,
                                     ),
+                                    if (_currentUserRole == 'seller_products') ...[
+                                      const SizedBox(height: 24),
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          context.push('/product-create');
+                                        },
+                                        icon: const Icon(Icons.add_rounded),
+                                        label: const Text('Create Product'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: colorScheme.primary,
+                                          foregroundColor: colorScheme.onPrimary,
+                                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -385,7 +521,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   crossAxisCount: 2,
                                   crossAxisSpacing: 12,
                                   mainAxisSpacing: 12,
-                                  childAspectRatio: 0.98, // Increased to prevent overflow on all devices
+                                  childAspectRatio: 0.70, // Adjusted for timer/price below image
                                 ),
                                 itemCount: _filteredProducts.length + (_hasMore && _isLoadingMore ? 1 : 0),
                                 itemBuilder: (context, index) {
@@ -403,18 +539,48 @@ class _HomeScreenState extends State<HomeScreen> {
                                   final imageUrls = product.imageUrls;
                                   final imageUrl = imageUrls.isNotEmpty ? imageUrls.first : null;
                                   
+                                  // Determine if this is a seller product (has sellerId) vs company product
+                                  final isSellerProduct = product.sellerId != null;
+                                  
                                   return RepaintBoundary(
-                                    child: ProductCard(
-                                      id: product.id.toString(),
-                                      title: product.title,
-                                      imageUrl: imageUrl ?? '',
-                                      currentBid: (product.currentBid ?? product.startingBid ?? product.startingPrice).toInt(),
-                                      totalBids: product.totalBids ?? 0,
-                                      endTime: product.auctionEndTime ?? DateTime.now().add(const Duration(days: 7)),
-                                      category: product.categoryName,
-                                      onTap: () {
-                                        context.go('/product-details/${product.id}');
-                                      },
+                                    child: Stack(
+                                      children: [
+                                        ProductCard(
+                                          id: product.id.toString(),
+                                          title: product.title,
+                                          imageUrl: imageUrl ?? '',
+                                          currentBid: (product.currentBid ?? product.startingBid ?? product.startingPrice).toInt(),
+                                          totalBids: product.totalBids ?? 0,
+                                          endTime: product.auctionEndTime ?? DateTime.now().add(const Duration(days: 7)),
+                                          category: product.categoryName,
+                                          onTap: () {
+                                            context.go('/product-details/${product.id}');
+                                          },
+                                        ),
+                                        // Badge to distinguish product source
+                                        if (_currentUserRole == 'company_products')
+                                          Positioned(
+                                            top: 8,
+                                            right: 8,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: isSellerProduct 
+                                                    ? AppColors.warning.withOpacity(0.9)
+                                                    : AppColors.blue600.withOpacity(0.9),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                isSellerProduct ? 'Seller' : 'Company',
+                                                style: const TextStyle(
+                                                  fontSize: 8,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                   );
                                 },
@@ -434,6 +600,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // Bottom Navigation Bar - IQ BidMaster Mobile App Style
       bottomNavigationBar: _BottomNavBar(
         onCategoryTap: _showCategoryModal,
+      ),
       ),
     );
   }
@@ -456,42 +623,37 @@ class _BottomNavBar extends StatelessWidget {
     
     return Container(
       decoration: BoxDecoration(
-        color: colorScheme.surface,
+        color: Theme.of(context).brightness == Brightness.dark
+            ? AppColors.surfaceDark
+            : AppColors.surfaceLight,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.1),
-            blurRadius: 10,
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.black.withOpacity(0.3)
+                : Colors.black.withOpacity(0.05),
+            blurRadius: 8,
             offset: const Offset(0, -2),
           ),
         ],
       ),
       child: SafeArea(
         child: Container(
-          height: 60,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          height: 65, // Slightly increased height
+          padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _BottomNavItem(
                 icon: Icons.home,
-                label: 'Home',
+                label: AppLocalizations.of(context)?.home ?? 'Home',
                 isActive: currentRoute == '/home',
                 onTap: () {
                   context.go('/home');
                 },
               ),
               _BottomNavItem(
-                icon: Icons.category,
-                label: 'Categories',
-                isActive: false, // Categories doesn't have a dedicated route
-                onTap: () {
-                  // Show category selection modal
-                  onCategoryTap(context);
-                },
-              ),
-              _BottomNavItem(
                 icon: Icons.gavel,
-                label: 'My Bids',
+                label: AppLocalizations.of(context)?.myBids ?? 'Bids',
                 isActive: currentRoute == '/buyer-bidding-history' || 
                          currentRoute == '/buyer/bidding-history',
                 onTap: () {
@@ -499,11 +661,27 @@ class _BottomNavBar extends StatelessWidget {
                 },
               ),
               _BottomNavItem(
-                icon: Icons.person_outline,
-                label: 'Profile',
-                isActive: currentRoute == '/profile',
+                icon: Icons.favorite_border,
+                label: 'Wishlist',
+                isActive: currentRoute == '/wishlist',
                 onTap: () {
-                  context.push('/profile');
+                  context.push('/wishlist');
+                },
+              ),
+              _BottomNavItem(
+                icon: Icons.check_circle_outline,
+                label: 'Wins',
+                isActive: currentRoute == '/wins',
+                onTap: () {
+                  context.push('/wins');
+                },
+              ),
+              _BottomNavItem(
+                icon: Icons.notifications_outlined,
+                label: 'Notification',
+                isActive: currentRoute == '/notifications',
+                onTap: () {
+                  context.push('/notifications');
                 },
               ),
             ],
@@ -536,13 +714,18 @@ class _BottomNavItem extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               icon,
-              color: isActive ? colorScheme.primary : colorScheme.onSurface.withOpacity(0.6),
+              color: isActive 
+                  ? AppColors.primaryBlue 
+                  : (Theme.of(context).brightness == Brightness.dark 
+                      ? AppColors.textSecondaryDark 
+                      : AppColors.textSecondaryLight),
               size: 24,
             ),
             const SizedBox(height: 4),
@@ -550,7 +733,11 @@ class _BottomNavItem extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 11,
-                color: isActive ? colorScheme.primary : colorScheme.onSurface.withOpacity(0.6),
+                color: isActive 
+                    ? AppColors.primaryBlue 
+                    : (Theme.of(context).brightness == Brightness.dark 
+                        ? AppColors.textSecondaryDark 
+                        : AppColors.textSecondaryLight),
                 fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
               ),
             ),

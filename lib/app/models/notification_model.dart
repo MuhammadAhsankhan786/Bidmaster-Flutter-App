@@ -18,14 +18,30 @@ class NotificationModel {
   });
 
   factory NotificationModel.fromJson(Map<String, dynamic> json) {
+    // Safely parse created_at
+    DateTime createdAt;
+    try {
+      if (json['created_at'] is String) {
+        createdAt = DateTime.parse(json['created_at'] as String);
+      } else if (json['created_at'] is DateTime) {
+        createdAt = json['created_at'] as DateTime;
+      } else {
+        // Fallback to current time if parsing fails
+        createdAt = DateTime.now();
+      }
+    } catch (e) {
+      print('Warning: Failed to parse created_at: ${json['created_at']}, using current time');
+      createdAt = DateTime.now();
+    }
+    
     return NotificationModel(
       id: json['id'] as int,
-      type: json['type'] as String,
-      title: json['title'] as String,
+      type: json['type'] as String? ?? 'general',
+      title: json['title'] as String? ?? 'Notification',
       message: json['message'] as String?,
       userId: json['user_id'] as int?,
       read: json['read'] as bool? ?? false,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: createdAt,
     );
   }
 

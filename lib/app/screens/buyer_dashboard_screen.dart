@@ -93,12 +93,21 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
 
       final newProducts = result['products'] as List<ProductModel>;
       final pagination = result['pagination'] as Map<String, dynamic>;
+      
+      final now = DateTime.now();
+      // Filter out expired products (auctionEndTime < now)
+      final activeProducts = newProducts.where((product) {
+        if (product.auctionEndTime == null) {
+          return true; // Keep products without end time (might be pending)
+        }
+        return product.auctionEndTime!.isAfter(now); // Only show if auction hasn't ended
+      }).toList();
 
       setState(() {
         if (reset) {
-          _products = newProducts;
+          _products = activeProducts;
         } else {
-          _products.addAll(newProducts);
+          _products.addAll(activeProducts);
         }
         _currentPage = pagination['page'] as int;
         _hasMore = _currentPage < (pagination['pages'] as int);
@@ -209,6 +218,24 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
               onTap: () {
                 Navigator.pop(context);
                 context.push('/notifications');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.favorite, color: AppColors.red600),
+              title: const Text('Wishlist'),
+              subtitle: const Text('View your saved products'),
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/wishlist');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.emoji_events, color: AppColors.green600),
+              title: const Text('Wins'),
+              subtitle: const Text('View your won auctions'),
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/wins');
               },
             ),
             const SizedBox(height: 8),

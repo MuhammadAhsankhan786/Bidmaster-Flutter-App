@@ -16,6 +16,8 @@ import '../screens/buyer_bidding_history_screen.dart';
 import '../screens/seller_earnings_screen.dart';
 import '../screens/seller_winner_details_screen.dart';
 import '../screens/profile_screen.dart';
+import '../screens/wishlist_screen.dart';
+import '../screens/wins_screen.dart';
 import '../models/product_model.dart';
 import '../services/storage_service.dart';
 
@@ -102,9 +104,13 @@ class AppRouter {
 
       // Wallet - accessible to both company_products and seller_products
       if (location == '/wallet') {
-        if (role != 'company_products' && role != 'seller_products') {
+        // Check if user is logged in
+        if (!isLoggedIn) {
           return '/auth';
         }
+        // Allow access - wallet screen will handle role validation and show appropriate error
+        // Don't block navigation based on role in router
+        return null;
       }
 
       // Profile - accessible to both company_products and seller_products
@@ -114,8 +120,9 @@ class AppRouter {
         }
       }
 
-      // Company Products routes - My Bids
-      if (location == '/buyer/bidding-history' || location == '/buyer-bidding-history') {
+      // Company Products routes - My Bids, Wishlist, Wins
+      if (location == '/buyer/bidding-history' || location == '/buyer-bidding-history' ||
+          location == '/wishlist' || location == '/wins') {
         if (role != 'company_products') {
           return role == 'seller_products' ? '/seller-dashboard' : '/role-selection';
         }
@@ -227,6 +234,16 @@ class AppRouter {
           final productId = state.pathParameters['productId'] ?? '1';
           return SellerWinnerDetailsScreen(productId: productId);
         },
+      ),
+      GoRoute(
+        path: '/wishlist',
+        name: 'wishlist',
+        builder: (context, state) => const WishlistScreen(),
+      ),
+      GoRoute(
+        path: '/wins',
+        name: 'wins',
+        builder: (context, state) => const WinsScreen(),
       ),
     ],
   );
