@@ -19,8 +19,8 @@ class ThemeToggleTile extends StatelessWidget {
           subtitle: Text(isDark ? 'Dark theme is enabled' : 'Light theme is enabled'),
           value: isDark,
           onChanged: (bool value) {
-            final brightness = value ? Brightness.dark : Brightness.light;
-            ThemeService.setThemeMode(brightness);
+            final themeMode = value ? ThemeMode.dark : ThemeMode.light;
+            ThemeService.setThemeMode(themeMode);
           },
         );
       },

@@ -9,12 +9,14 @@ class HomeHeader extends StatefulWidget {
   final TextEditingController? searchController;
   final VoidCallback? onSearchSubmitted;
   final VoidCallback? onRoleChanged;
+  final bool showBackButton;
 
   const HomeHeader({
     super.key,
     this.searchController,
     this.onSearchSubmitted,
     this.onRoleChanged,
+    this.showBackButton = false,
   });
 
   @override
@@ -99,6 +101,15 @@ class _HomeHeaderState extends State<HomeHeader> {
             duration: const Duration(seconds: 2),
           ),
         );
+        
+        // Navigate to appropriate screen based on role
+        if (newRole == 'seller_products') {
+          // Navigate to seller dashboard
+          context.go('/seller-dashboard');
+        } else if (newRole == 'company_products') {
+          // Navigate to home (company products view)
+          context.go('/home');
+        }
       }
     } catch (e) {
       setState(() {
@@ -162,21 +173,39 @@ class _HomeHeaderState extends State<HomeHeader> {
           // Top Row: Hamburger Menu + Logo + Profile Icon (Mobile App Style)
           Row(
             children: [
-              // Hamburger Menu Icon
-              Builder(
-                builder: (context) => IconButton(
+              // Back Button (if showBackButton is true) or Hamburger Menu
+              if (widget.showBackButton)
+                IconButton(
                   onPressed: () {
-                    Scaffold.of(context).openDrawer();
+                    if (Navigator.of(context).canPop()) {
+                      Navigator.of(context).pop();
+                    } else {
+                      context.go('/home');
+                    }
                   },
                   icon: Icon(
-                    Icons.menu,
+                    Icons.arrow_back,
                     color: colorScheme.onSurface,
                     size: 24,
                   ),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
+                )
+              else
+                Builder(
+                  builder: (context) => IconButton(
+                    onPressed: () {
+                      Scaffold.of(context).openDrawer();
+                    },
+                    icon: Icon(
+                      Icons.menu,
+                      color: colorScheme.onSurface,
+                      size: 24,
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
                 ),
-              ),
               
               const SizedBox(width: 8),
               
@@ -271,6 +300,24 @@ class _HomeHeaderState extends State<HomeHeader> {
               ),
               
               const Spacer(),
+              
+              // Add Product button (only for sellers)
+              if (_currentRole == 'seller_products') ...[
+                IconButton(
+                  onPressed: () {
+                    context.push('/product-create');
+                  },
+                  icon: Icon(
+                    Icons.add_rounded,
+                    color: colorScheme.onSurface,
+                    size: 24,
+                  ),
+                  tooltip: 'Add Product',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 8),
+              ],
               
               // Notifications icon
               IconButton(
@@ -455,21 +502,97 @@ class _SearchBox extends StatefulWidget {
   State<_SearchBox> createState() => _SearchBoxState();
 }
 
-class _SearchBoxState extends State<_SearchBox> {
+class _SearchBoxState extends State<_SearchBox> with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  int _currentHintIndex = 0;
+  
+  final List<String> _hints = [
+    'Search here product',
+    'Search out category',
+  ];
+
   @override
   void initState() {
     super.initState();
     widget.controller?.addListener(_onTextChanged);
+    
+    // Initialize animation controller
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    
+    // Fade animation for smooth transition
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeInOut,
+      ),
+    );
+    
+    // Start with visible hint
+    _animationController.forward();
+    
+    // Start hint rotation
+    _startHintRotation();
+  }
+
+  void _startHintRotation() {
+    // Change hint every 3 seconds
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && (widget.controller?.text.isEmpty ?? true)) {
+        // Fade out
+        _animationController.reverse().then((_) {
+          if (mounted) {
+            setState(() {
+              _currentHintIndex = (_currentHintIndex + 1) % _hints.length;
+            });
+            // Fade in
+            _animationController.forward();
+          }
+        });
+        // Schedule next change
+        _startHintRotation();
+      }
+    });
+  }
+
+  void _changeHint() {
+    if (mounted && (widget.controller?.text.isEmpty ?? true)) {
+      // Fade out current hint
+      _animationController.reverse().then((_) {
+        if (mounted) {
+          setState(() {
+            _currentHintIndex = (_currentHintIndex + 1) % _hints.length;
+          });
+          // Fade in new hint
+          _animationController.forward();
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
     widget.controller?.removeListener(_onTextChanged);
+    _animationController.dispose();
     super.dispose();
   }
 
   void _onTextChanged() {
     setState(() {});
+    // Stop animation when user types
+    if (widget.controller?.text.isNotEmpty ?? false) {
+      _animationController.stop();
+    } else {
+      // Resume animation when search is cleared
+      _animationController.forward();
+      _startHintRotation();
+    }
   }
 
   @override
@@ -489,42 +612,68 @@ class _SearchBoxState extends State<_SearchBox> {
           width: 1,
         ),
       ),
-      child: TextField(
-        controller: widget.controller,
-        decoration: InputDecoration(
-          hintText: 'Search',
-          hintStyle: TextStyle(
-            color: colorScheme.onSurface.withOpacity(0.6),
-            fontSize: 14,
+      child: Stack(
+        children: [
+          TextField(
+            controller: widget.controller,
+            decoration: InputDecoration(
+              hintText: '', // Empty hint, we'll overlay our animated hint
+              prefixIcon: Icon(
+                Icons.search,
+                color: colorScheme.onSurface.withOpacity(0.6),
+                size: 20,
+              ),
+              suffixIcon: hasText
+                  ? IconButton(
+                      icon: Icon(
+                        Icons.clear,
+                        color: colorScheme.onSurface.withOpacity(0.6),
+                        size: 20,
+                      ),
+                      onPressed: () {
+                        widget.controller?.clear();
+                        widget.onSearchSubmitted?.call();
+                        // Resume animation
+                        _animationController.forward();
+                        _startHintRotation();
+                      },
+                    )
+                  : null,
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+            style: TextStyle(
+              fontSize: 14,
+              color: colorScheme.onSurface,
+            ),
+            onSubmitted: (value) {
+              widget.onSearchSubmitted?.call();
+            },
+            onTap: () {
+              // Stop animation when user focuses on search
+              _animationController.stop();
+            },
           ),
-          prefixIcon: Icon(
-            Icons.search,
-            color: colorScheme.onSurface.withOpacity(0.6),
-            size: 20,
-          ),
-          suffixIcon: hasText
-              ? IconButton(
-                  icon: Icon(
-                    Icons.clear,
-                    color: colorScheme.onSurface.withOpacity(0.6),
-                    size: 20,
+          // Animated hint overlay
+          if (!hasText)
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 40, right: 40), // Account for prefix and suffix icons
+                child: Center(
+                  child: FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: Text(
+                      _hints[_currentHintIndex],
+                      style: TextStyle(
+                        color: colorScheme.onSurface.withOpacity(0.6),
+                        fontSize: 14,
+                      ),
+                    ),
                   ),
-                  onPressed: () {
-                    widget.controller?.clear();
-                    widget.onSearchSubmitted?.call();
-                  },
-                )
-              : null,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        ),
-        style: TextStyle(
-          fontSize: 14,
-          color: colorScheme.onSurface,
-        ),
-        onSubmitted: (value) {
-          widget.onSearchSubmitted?.call();
-        },
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

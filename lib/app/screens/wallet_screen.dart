@@ -18,12 +18,26 @@ class _WalletScreenState extends State<WalletScreen> {
   Map<String, dynamic>? _walletData;
   bool _isLoading = true;
   String? _errorMessage;
+  String? _userRole; // Track user role to hide seller earnings from customers
 
   @override
   void initState() {
     super.initState();
+    _loadUserRole();
     // Load wallet data immediately - ensures wallet opens properly
     _loadWalletData();
+  }
+
+  Future<void> _loadUserRole() async {
+    final role = await StorageService.getUserRole();
+    setState(() {
+      _userRole = role;
+    });
+  }
+
+  // Check if current user is a seller
+  bool get _isSeller {
+    return _userRole?.toLowerCase() == 'seller_products';
   }
 
   Future<void> _loadWalletData() async {
@@ -296,17 +310,20 @@ class _WalletScreenState extends State<WalletScreen> {
                                         amount: _safeGetDouble(_walletData?['breakdown']?['referral_rewards']),
                                         color: AppColors.green500,
                                       ),
-                                      _BalanceItem(
-                                        label: 'Earnings',
-                                        amount: _safeGetDouble(_walletData?['breakdown']?['seller_earnings']),
-                                        color: AppColors.yellow500,
-                                      ),
-                                      if (_safeGetDouble(_walletData?['breakdown']?['pending_earnings']) > 0)
+                                      // Seller Earnings - HIDDEN for customers
+                                      if (_isSeller) ...[
                                         _BalanceItem(
-                                          label: 'Pending',
-                                          amount: _safeGetDouble(_walletData?['breakdown']?['pending_earnings']),
-                                          color: AppColors.yellow600,
+                                          label: 'Earnings',
+                                          amount: _safeGetDouble(_walletData?['breakdown']?['seller_earnings']),
+                                          color: AppColors.yellow500,
                                         ),
+                                        if (_safeGetDouble(_walletData?['breakdown']?['pending_earnings']) > 0)
+                                          _BalanceItem(
+                                            label: 'Pending',
+                                            amount: _safeGetDouble(_walletData?['breakdown']?['pending_earnings']),
+                                            color: AppColors.yellow600,
+                                          ),
+                                      ],
                                     ],
                                   ),
                                 ],

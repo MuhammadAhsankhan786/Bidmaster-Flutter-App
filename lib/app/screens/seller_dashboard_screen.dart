@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/colors.dart';
 import '../widgets/countdown_timer.dart';
+import '../widgets/home_header.dart';
+import '../widgets/banner_carousel.dart';
+import '../widgets/category_chips.dart';
+import '../widgets/product_card.dart';
+import '../widgets/app_drawer.dart';
 import '../services/api_service.dart';
 import '../services/storage_service.dart';
 import '../models/product_model.dart';
@@ -21,6 +27,17 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   String _selectedStatus = 'all'; // all, pending, approved, sold
+  String _selectedCategory = 'All';
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  
+  // Categories loaded from API
+  List<String> _categories = ['All'];
+  bool _categoriesLoaded = false;
+  bool _isLoadingMore = false;
+  bool _loadMoreScheduled = false;
+  int _currentPage = 1;
+  bool _hasMore = true;
 
   List<StatData> get _stats {
     final activeProducts = _products.where((p) => p.status == 'approved').length;
@@ -63,45 +80,127 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _loadCategories();
     _loadProducts();
+    _searchController.addListener(_onSearchChanged);
   }
 
-  Future<void> _loadProducts() async {
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadCategories() async {
+    if (_categoriesLoaded) return;
+    
+    try {
+      final categories = await apiService.getAllCategories();
+      final categoryNames = categories
+          .map((cat) => cat['name'] as String)
+          .where((name) => name.isNotEmpty)
+          .toSet()
+          .toList();
+      
+      if (kDebugMode) {
+        print('📂 Seller Dashboard - Categories loaded: ${categoryNames.length}');
+        print('   Categories: $categoryNames');
+      }
+      
+      setState(() {
+        _categories = ['All', ...categoryNames];
+        _categoriesLoaded = true;
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error loading categories in seller dashboard: $e');
+      }
+      // Keep 'All' as default even if loading fails
+      setState(() {
+        _categories = ['All'];
+        _categoriesLoaded = true;
+      });
+    }
+  }
+
+  void _onSearchChanged() {
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (_searchController.text == _searchController.text) {
+        _loadProducts(reset: true);
+      }
+    });
+  }
+
+  void _onCategorySelected(String category) {
+    if (_selectedCategory != category) {
+      setState(() {
+        _selectedCategory = category;
+      });
+      _loadProducts(reset: true);
+    }
+  }
+
+  Future<void> _loadProducts({bool reset = false}) async {
+    if (reset) {
+      setState(() {
+        _currentPage = 1;
+        _products = [];
+        _hasMore = true;
+      });
+    }
+
+    if (_isLoadingMore) return;
+
     setState(() {
-      _isLoading = true;
+      if (!reset) {
+        _isLoadingMore = true;
+      } else {
+        _isLoading = true;
+      }
       _errorMessage = null;
     });
 
     try {
-      // Debug: Check logged-in user
-      if (kDebugMode) {
-        final userId = await StorageService.getUserId();
-        final userRole = await StorageService.getUserRole();
-        final userPhone = await StorageService.getUserPhone();
-        print('🔍 Debug - Current User:');
-        print('   User ID: $userId');
-        print('   Role: $userRole');
-        print('   Phone: $userPhone');
-      }
-      
+      // Get seller's products
       final products = await apiService.getMyProducts();
-      if (kDebugMode) {
-        print('📦 Products received: ${products.length}');
+      
+      // Apply filters client-side
+      List<ProductModel> filteredProducts = products;
+      
+      // Filter by status
+      if (_selectedStatus != 'all') {
+        filteredProducts = filteredProducts.where((p) => p.status == _selectedStatus).toList();
       }
       
-      final now = DateTime.now();
-      // Filter out expired products (auctionEndTime < now) - sellers can still see their expired products for reference
-      // But for active listings view, we filter them out
-      final activeProducts = products.where((product) {
-        if (product.auctionEndTime == null) {
-          return true; // Keep products without end time (might be pending)
-        }
-        return product.auctionEndTime!.isAfter(now); // Only show if auction hasn't ended
-      }).toList();
+      // Filter by category
+      if (_selectedCategory != 'All') {
+        filteredProducts = filteredProducts.where((p) => p.categoryName == _selectedCategory).toList();
+      }
+      
+      // Filter by search query (search in title, description, and category name)
+      final searchQuery = _searchController.text.trim().toLowerCase();
+      if (searchQuery.isNotEmpty) {
+        filteredProducts = filteredProducts.where((p) {
+          // Search in title
+          if (p.title.toLowerCase().contains(searchQuery)) return true;
+          // Search in description
+          if (p.description?.toLowerCase().contains(searchQuery) ?? false) return true;
+          // Search in category name
+          if (p.categoryName?.toLowerCase().contains(searchQuery) ?? false) return true;
+          return false;
+        }).toList();
+      }
       
       setState(() {
-        _products = activeProducts;
+        if (reset) {
+          _products = filteredProducts;
+        } else {
+          _products.addAll(filteredProducts);
+        }
+        _hasMore = false; // getMyProducts returns all products, no pagination
         _isLoading = false;
+        _isLoadingMore = false;
       });
     } catch (e) {
       if (kDebugMode) {
@@ -110,6 +209,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;
+        _isLoadingMore = false;
       });
     }
   }
@@ -184,413 +284,347 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
         }
       },
       child: Scaffold(
-      backgroundColor: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          if (kDebugMode) {
-            print('🔘 FAB: Add New Product clicked');
-          }
-          context.push('/product-create').then((result) {
-            print('🔘 Product creation result: $result');
-            if (result == true) {
-              // Reload products after successful creation
-              _loadProducts();
-            }
-          });
-        },
-        backgroundColor: AppColors.primaryBlue,
-        icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: const Text(
-          'Upload Product',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        tooltip: 'Upload New Product',
-      ),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      drawer: const AppDrawer(),
       body: SafeArea(
         child: Column(
           children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-                border: Border(
-                  bottom: BorderSide(
-                    color: isDark ? AppColors.slate800 : AppColors.slate200,
-                  ),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      // Back Button
-                      IconButton(
-                        onPressed: () {
-                          if (context.canPop()) {
-                            context.pop();
-                          } else {
-                            context.go('/home');
-                          }
-                        },
-                        icon: Icon(
-                          Icons.arrow_back_rounded,
-                          color: isDark
-                              ? AppColors.textPrimaryDark
-                              : AppColors.textPrimaryLight,
-                        ),
-                        tooltip: 'Back',
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                      const SizedBox(width: 8),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Seller Dashboard',
-                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                          ),
-                          Text(
-                            'Manage your listings',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: isDark
-                                      ? AppColors.textSecondaryDark
-                                      : AppColors.textSecondaryLight,
-                                ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: isDark ? AppColors.slate800 : AppColors.slate100,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isDark ? AppColors.slate700 : AppColors.slate200,
-                            width: 1,
-                          ),
-                        ),
-                        child: IconButton(
-                          onPressed: () {
-                            context.push('/profile');
-                          },
-                          icon: const Icon(Icons.person_outline_rounded),
-                          tooltip: 'Profile',
-                          iconSize: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: isDark ? AppColors.slate800 : AppColors.slate100,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isDark ? AppColors.slate700 : AppColors.slate200,
-                            width: 1,
-                          ),
-                        ),
-                        child: IconButton(
-                          onPressed: () {
-                            context.push('/seller/earnings');
-                          },
-                          icon: const Icon(Icons.account_balance_wallet_rounded),
-                          tooltip: 'View Earnings',
-                          iconSize: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryBlue,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primaryBlue.withOpacity(0.3),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () {
-                              if (kDebugMode) {
-                                print('🔘 Add New Listing FAB clicked');
-                              }
-                              context.push('/product-create').then((result) {
-                                if (kDebugMode) {
-                                  print('🔘 Product creation result: $result');
-                                }
-                                if (result == true) {
-                                  // Reload products after successful creation
-                                  _loadProducts();
-                                }
-                              });
-                            },
-                            borderRadius: BorderRadius.circular(16),
-                            child: const Icon(
-                              Icons.add_rounded,
-                              color: AppColors.cardWhite,
-                              size: 28,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+            // Top Header - Same as Home Screen with Back Button
+            HomeHeader(
+              searchController: _searchController,
+              onSearchSubmitted: () => _loadProducts(reset: true),
+              showBackButton: true,
             ),
 
             // Content
             Expanded(
               child: RefreshIndicator(
-                onRefresh: _loadProducts,
+                onRefresh: () => _loadProducts(reset: true),
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
+                  controller: _scrollController,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                    // Stats Cards
-                    if (_isLoading && _products.isEmpty)
-                      const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(32.0),
-                          child: CircularProgressIndicator(),
-                        ),
-                      )
-                    else if (_errorMessage != null && _products.isEmpty)
-                      Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32.0),
-                          child: Column(
-                            children: [
-                              Icon(Icons.error_outline, size: 48, color: AppColors.error),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Failed to load listings',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                _errorMessage!,
-                                style: Theme.of(context).textTheme.bodySmall,
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 16),
-                              ElevatedButton(
-                                onPressed: _loadProducts,
-                                child: const Text('Retry'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    else ...[
-                      RepaintBoundary(
-                        child: ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _stats.length,
-                        separatorBuilder: (context, index) =>
-                            const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          final stat = _stats[index];
-                          return RepaintBoundary(
-                            child: _StatCard(stat: stat),
-                          );
-                        },
-                      ),
-                    ),
+                      // Banner Carousel - Same as Home Screen
+                      const BannerCarousel(),
 
-                      const SizedBox(height: 24),
-
-                      // My Listings Section
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'My Listings',
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                          ),
-                          // Status Filter
-                          Row(
-                            children: [
-                              _buildStatusFilter('all', 'All'),
-                              const SizedBox(width: 8),
-                              _buildStatusFilter('pending', 'Pending'),
-                              const SizedBox(width: 8),
-                              _buildStatusFilter('approved', 'Active'),
-                            ],
-                          ),
-                        ],
+                      // Category Filter Chips - Same as Home Screen (Always visible)
+                      // Always show CategoryChips - it handles empty state internally
+                      CategoryChips(
+                        categories: _categories,
+                        selectedCategory: _selectedCategory,
+                        onCategorySelected: _onCategorySelected,
                       ),
 
                       const SizedBox(height: 16),
 
-                      // Listings
-                      if (_filteredListings.isEmpty)
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(32.0),
-                            child: Column(
-                              children: [
-                                Icon(Icons.inbox_outlined, size: 48, color: AppColors.slate400),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No listings found',
-                                  style: Theme.of(context).textTheme.titleMedium,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Create your first listing to get started',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
+                      // Stats Cards (Optional - Seller-specific)
+                      if (!_isLoading && _products.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: RepaintBoundary(
+                            child: ListView.separated(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: _stats.length,
+                              separatorBuilder: (context, index) => const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                final stat = _stats[index];
+                                return RepaintBoundary(
+                                  child: _StatCard(stat: stat),
+                                );
+                              },
                             ),
                           ),
-                        )
-                      else
-                        RepaintBoundary(
-                          child: ListView.separated(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _filteredListings.length,
-                            separatorBuilder: (context, index) =>
-                                const SizedBox(height: 12),
-                            itemBuilder: (context, index) {
-                              final product = _filteredListings[index];
-                              final imageUrls = product.imageUrls;
-                              final imageUrl = imageUrls.isNotEmpty ? imageUrls.first : null;
-                              
-                              return RepaintBoundary(
-                                child: _ListingCard(
-                              product: product,
-                              imageUrl: imageUrl ?? '',
-                              onTap: product.status == 'approved'
-                                  ? () {
-                                      context.go('/product-details/${product.id}');
-                                    }
-                                  : null,
-                              onEdit: () async {
-                                // Navigate to edit screen (reuse create screen with product data)
-                                final result = await context.push(
-                                  '/product-create',
-                                  extra: product, // Pass product for editing
-                                );
-                                if (result == true) {
-                                  _loadProducts();
-                                }
-                              },
-                              onDelete: () async {
-                                // Show confirmation dialog
-                                final confirmed = await showDialog<bool>(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    title: const Text('Delete Product'),
-                                    content: Text('Are you sure you want to delete "${product.title}"? This action cannot be undone.'),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context, false),
-                                        child: const Text('Cancel'),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // Status Filter Chips
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: [
+                            _buildStatusFilter('all', 'All'),
+                            const SizedBox(width: 8),
+                            _buildStatusFilter('pending', 'Pending'),
+                            const SizedBox(width: 8),
+                            _buildStatusFilter('approved', 'Active'),
+                            const SizedBox(width: 8),
+                            _buildStatusFilter('sold', 'Sold'),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Products Grid - Same as Home Screen (2 columns)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (_isLoading && _products.isEmpty)
+                              const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(32.0),
+                                  child: CircularProgressIndicator(),
+                                ),
+                              )
+                            else if (_errorMessage != null && _products.isEmpty)
+                              Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(32.0),
+                                  child: Column(
+                                    children: [
+                                      Icon(Icons.error_outline, size: 48, color: AppColors.error),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'Failed to load listings',
+                                        style: Theme.of(context).textTheme.titleMedium,
                                       ),
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context, true),
-                                        style: TextButton.styleFrom(
-                                          foregroundColor: AppColors.red600,
-                                        ),
-                                        child: const Text('Delete'),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        _errorMessage!,
+                                        style: Theme.of(context).textTheme.bodySmall,
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      const SizedBox(height: 16),
+                                      ElevatedButton(
+                                        onPressed: () => _loadProducts(reset: true),
+                                        child: const Text('Retry'),
                                       ),
                                     ],
                                   ),
-                                );
-                                
-                                if (confirmed == true) {
-                                  try {
-                                    await apiService.deleteProduct(product.id);
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Product deleted successfully'),
-                                          backgroundColor: AppColors.green600,
+                                ),
+                              )
+                            else if (_filteredListings.isEmpty)
+                              Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(32.0),
+                                  child: Column(
+                                    children: [
+                                      Icon(Icons.inbox_outlined, size: 48, color: AppColors.slate400),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'No listings found',
+                                        style: Theme.of(context).textTheme.titleMedium,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Create your first listing to get started',
+                                        style: Theme.of(context).textTheme.bodySmall,
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      const SizedBox(height: 24),
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          context.push('/product-create').then((result) {
+                                            if (result == true) {
+                                              _loadProducts(reset: true);
+                                            }
+                                          });
+                                        },
+                                        icon: const Icon(Icons.add_rounded),
+                                        label: const Text('Create Product'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Theme.of(context).colorScheme.primary,
+                                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                                         ),
-                                      );
-                                      _loadProducts();
-                                    }
-                                  } catch (e) {
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text('Failed to delete product: ${e.toString()}'),
-                                          backgroundColor: AppColors.red600,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            else
+                              GridView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 2,
+                                  crossAxisSpacing: 12,
+                                  mainAxisSpacing: 12,
+                                  childAspectRatio: 0.70,
+                                ),
+                                itemCount: _filteredListings.length,
+                                itemBuilder: (context, index) {
+                                  final product = _filteredListings[index];
+                                  final imageUrls = product.imageUrls;
+                                  final imageUrl = imageUrls.isNotEmpty ? imageUrls.first : null;
+                                  
+                                  return RepaintBoundary(
+                                    child: Stack(
+                                      children: [
+                                        ProductCard(
+                                          id: product.id.toString(),
+                                          title: product.title,
+                                          imageUrl: imageUrl ?? '',
+                                          currentBid: (product.currentBid ?? product.startingBid ?? product.startingPrice).toInt(),
+                                          totalBids: product.totalBids ?? 0,
+                                          endTime: product.auctionEndTime ?? DateTime.now().add(const Duration(days: 7)),
+                                          category: product.categoryName,
+                                          onTap: product.status == 'approved'
+                                              ? () {
+                                                  context.go('/product-details/${product.id}');
+                                                }
+                                              : () {}, // Empty function for non-approved products
                                         ),
-                                      );
-                                    }
-                                  }
-                                }
-                              },
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    ],
-
-                    const SizedBox(height: 16),
-
-                    // Add New Listing Button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          print('🔘 Add New Listing button clicked');
-                          context.push('/product-create').then((result) {
-                            print('🔘 Product creation result: $result');
-                            if (result == true) {
-                              // Reload products after successful creation
-                              _loadProducts();
-                            }
-                          });
-                        },
-                        icon: const Icon(Icons.add_rounded),
-                        label: const Text('Add New Listing'),
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(
-                            color: isDark ? AppColors.slate700 : AppColors.slate300,
-                            width: 2,
-                            style: BorderStyle.solid,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
-                          ),
+                                        // Status Badge
+                                        if (product.status != 'approved')
+                                          Positioned(
+                                            top: 8,
+                                            right: 8,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: product.status == 'pending'
+                                                    ? AppColors.yellow100
+                                                    : AppColors.red100,
+                                                borderRadius: BorderRadius.circular(12),
+                                              ),
+                                              child: Text(
+                                                product.status == 'pending' ? 'Pending' : product.status.toUpperCase(),
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: product.status == 'pending'
+                                                      ? AppColors.yellow700
+                                                      : AppColors.red700,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        // Edit/Delete buttons overlay - Professional design with subtle appearance
+                                        Positioned(
+                                          top: 8,
+                                          right: 8,
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withOpacity(0.95),
+                                              borderRadius: BorderRadius.circular(8),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black.withOpacity(0.1),
+                                                  blurRadius: 8,
+                                                  offset: const Offset(0, 2),
+                                                ),
+                                              ],
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Material(
+                                                  color: Colors.transparent,
+                                                  child: InkWell(
+                                                    onTap: () async {
+                                                      final result = await context.push(
+                                                        '/product-create',
+                                                        extra: product,
+                                                      );
+                                                      if (result == true) {
+                                                        _loadProducts(reset: true);
+                                                      }
+                                                    },
+                                                    borderRadius: const BorderRadius.only(
+                                                      topLeft: Radius.circular(8),
+                                                      bottomLeft: Radius.circular(8),
+                                                    ),
+                                                    child: Container(
+                                                      padding: const EdgeInsets.all(8),
+                                                      child: Icon(
+                                                        Icons.edit_outlined,
+                                                        size: 18,
+                                                        color: AppColors.primaryBlue,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                Container(
+                                                  width: 1,
+                                                  height: 24,
+                                                  color: Colors.grey.withOpacity(0.3),
+                                                ),
+                                                Material(
+                                                  color: Colors.transparent,
+                                                  child: InkWell(
+                                                    onTap: () async {
+                                                      final confirmed = await showDialog<bool>(
+                                                        context: context,
+                                                        builder: (context) => AlertDialog(
+                                                          title: const Text('Delete Product'),
+                                                          content: Text('Are you sure you want to delete "${product.title}"?'),
+                                                          actions: [
+                                                            TextButton(
+                                                              onPressed: () => Navigator.pop(context, false),
+                                                              child: const Text('Cancel'),
+                                                            ),
+                                                            TextButton(
+                                                              onPressed: () => Navigator.pop(context, true),
+                                                              style: TextButton.styleFrom(
+                                                                foregroundColor: AppColors.red600,
+                                                              ),
+                                                              child: const Text('Delete'),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      );
+                                                      if (confirmed == true) {
+                                                        try {
+                                                          await apiService.deleteProduct(product.id);
+                                                          if (context.mounted) {
+                                                            ScaffoldMessenger.of(context).showSnackBar(
+                                                              const SnackBar(
+                                                                content: Text('Product deleted successfully'),
+                                                                backgroundColor: AppColors.green600,
+                                                              ),
+                                                            );
+                                                            _loadProducts(reset: true);
+                                                          }
+                                                        } catch (e) {
+                                                          if (context.mounted) {
+                                                            ScaffoldMessenger.of(context).showSnackBar(
+                                                              SnackBar(
+                                                                content: Text('Failed to delete: ${e.toString()}'),
+                                                                backgroundColor: AppColors.red600,
+                                                              ),
+                                                            );
+                                                          }
+                                                        }
+                                                      }
+                                                    },
+                                                    borderRadius: const BorderRadius.only(
+                                                      topRight: Radius.circular(8),
+                                                      bottomRight: Radius.circular(8),
+                                                    ),
+                                                    child: Container(
+                                                      padding: const EdgeInsets.all(8),
+                                                      child: Icon(
+                                                        Icons.delete_outline,
+                                                        size: 18,
+                                                        color: AppColors.red600,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                          ],
                         ),
                       ),
-                    ),
-                  ],
+
+                      const SizedBox(height: 16),
+                    ],
+                  ),
                 ),
               ),
-            ),
             ),
           ],
         ),
@@ -600,6 +634,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   }
 }
 
+// Keep existing _StatCard and _ListingCard classes below
 class _StatCard extends StatelessWidget {
   final StatData stat;
 
@@ -608,22 +643,21 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
+    
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? AppColors.slate700 : AppColors.slate200,
-          width: 1,
+        gradient: LinearGradient(
+          colors: stat.gradientColors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-            spreadRadius: 0,
+            color: stat.gradientColors.first.withOpacity(0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -635,25 +669,27 @@ class _StatCard extends StatelessWidget {
               children: [
                 Text(
                   stat.label,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isDark
-                            ? AppColors.textSecondaryDark
-                            : AppColors.textSecondaryLight,
-                      ),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.cardWhite.withOpacity(0.9),
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   stat.value,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style: TextStyle(
+                    fontSize: 24,
+                    color: AppColors.cardWhite,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   stat.change,
                   style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.green600,
+                    fontSize: 11,
+                    color: AppColors.cardWhite.withOpacity(0.8),
                   ),
                 ),
               ],
@@ -663,14 +699,10 @@ class _StatCard extends StatelessWidget {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: stat.gradientColors,
-              ),
-              borderRadius: BorderRadius.circular(16),
+              color: AppColors.cardWhite.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: AppColors.cardWhite.withOpacity(0.2),
+                color: AppColors.cardWhite.withOpacity(0.3),
                 width: 1,
               ),
               boxShadow: [
@@ -792,6 +824,33 @@ class _ListingCard extends StatelessWidget {
                         ),
                     ],
                   ),
+                  const SizedBox(height: 6),
+                  // Category Display
+                  if (product.categoryName != null && product.categoryName!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.category_rounded,
+                            size: 12,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : AppColors.textSecondaryLight,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            product.categoryName!,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight,
+                                  fontSize: 11,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
                   const SizedBox(height: 8),
                   if (product.status == 'approved')
                     Column(

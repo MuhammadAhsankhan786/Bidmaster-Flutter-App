@@ -25,6 +25,10 @@ dependencies:
   cached_network_image: ^3.3.1  # For production-ready image caching
   intl: ^0.20.2  # For internationalization (required by flutter_localizations)
   connectivity_plus: ^6.0.5  # For checking internet connectivity
+  flutter_animate: ^4.5.0  # For smooth animations
+  animations: ^2.0.11  # Material page transitions
+  shimmer: ^3.0.0  # Loading shimmer effects
+  lottie: ^3.1.2  # Lottie animations
 
 dev_dependencies:
   flutter_test:

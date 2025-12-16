@@ -23,6 +23,7 @@ class ProductModel {
   final String? highestBidderName;
   final double? hoursLeft;
   final String? auctionStatus;
+  final String? condition; // New / Used / Working
 
   ProductModel({
     required this.id,
@@ -46,6 +47,7 @@ class ProductModel {
     this.highestBidderName,
     this.hoursLeft,
     this.auctionStatus,
+    this.condition,
   });
 
   // Helper function to safely parse numeric values from JSON
@@ -116,6 +118,7 @@ class ProductModel {
       highestBidderName: json['highest_bidder_name'] as String?,
       hoursLeft: _parseDouble(json['hours_left']),
       auctionStatus: json['auction_status'] as String?,
+      condition: json['condition'] as String?,
     );
   }
 
@@ -142,6 +145,7 @@ class ProductModel {
       'highest_bidder_name': highestBidderName,
       'hours_left': hoursLeft,
       'auction_status': auctionStatus,
+      'condition': condition,
     };
   }
 

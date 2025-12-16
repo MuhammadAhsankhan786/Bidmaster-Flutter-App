@@ -34,6 +34,7 @@ class _BannerCarouselState extends State<BannerCarousel> {
   /// Load banners from backend API with fallback
   Future<void> _loadBanners() async {
     try {
+      if (!mounted) return;
       setState(() {
         _isLoading = true;
         _hasError = false;
@@ -41,6 +42,8 @@ class _BannerCarouselState extends State<BannerCarousel> {
 
       // Fetch banners from API (handles 404 and other errors gracefully)
       final banners = await apiService.getBanners();
+      
+      if (!mounted) return; // Check again after async operation
       
       if (banners.isNotEmpty) {
         // Extract image URLs from API response (Cloudinary URLs or local URLs)
@@ -71,12 +74,14 @@ class _BannerCarouselState extends State<BannerCarousel> {
           if (kDebugMode) {
             print('✅ Loaded ${imageUrls.length} banner images');
           }
-          setState(() {
-            _bannerImages = imageUrls;
-            _isLoading = false;
-            _hasError = false;
-          });
-          _startAutoScroll();
+          if (mounted) {
+            setState(() {
+              _bannerImages = imageUrls;
+              _isLoading = false;
+              _hasError = false;
+            });
+            _startAutoScroll();
+          }
           return;
         } else {
           if (kDebugMode) {
@@ -93,11 +98,13 @@ class _BannerCarouselState extends State<BannerCarousel> {
       if (kDebugMode) {
         print('⚠️ No banners available - hiding carousel');
       }
-      setState(() {
-        _bannerImages = [];
-        _isLoading = false;
-        _hasError = false;
-      });
+      if (mounted) {
+        setState(() {
+          _bannerImages = [];
+          _isLoading = false;
+          _hasError = false;
+        });
+      }
       // Don't start auto-scroll if no banners
     } catch (e) {
       // On error, hide carousel gracefully (no error thrown to user)
@@ -114,11 +121,13 @@ class _BannerCarouselState extends State<BannerCarousel> {
         }
         print('   Hiding carousel gracefully (no error shown to user)');
       }
-      setState(() {
-        _bannerImages = [];
-        _isLoading = false;
-        _hasError = false; // Don't mark as error - just no banners available
-      });
+      if (mounted) {
+        setState(() {
+          _bannerImages = [];
+          _isLoading = false;
+          _hasError = false; // Don't mark as error - just no banners available
+        });
+      }
       // Don't start auto-scroll if error
     }
   }
@@ -184,9 +193,11 @@ class _BannerCarouselState extends State<BannerCarousel> {
           PageView.builder(
             controller: _pageController,
             onPageChanged: (index) {
-              setState(() {
-                _currentPage = index;
-              });
+              if (mounted) {
+                setState(() {
+                  _currentPage = index;
+                });
+              }
             },
             itemCount: _bannerImages.length,
             itemBuilder: (context, index) {
@@ -315,25 +326,32 @@ class _BannerCarouselState extends State<BannerCarousel> {
                     }
                   },
                   borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.9),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
+                  child: Builder(
+                    builder: (context) {
+                      final isDark = Theme.of(context).brightness == Brightness.dark;
+                      return Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.black.withOpacity(0.6)
+                              : Colors.white.withOpacity(0.9),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.chevron_left,
-                      color: Color(0xFF222222),
-                      size: 24,
-                    ),
+                        child: Icon(
+                          Icons.chevron_left,
+                          color: isDark ? Colors.white70 : const Color(0xFF222222),
+                          size: 24,
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -362,25 +380,32 @@ class _BannerCarouselState extends State<BannerCarousel> {
                     }
                   },
                   borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.9),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
+                  child: Builder(
+                    builder: (context) {
+                      final isDark = Theme.of(context).brightness == Brightness.dark;
+                      return Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.black.withOpacity(0.6)
+                              : Colors.white.withOpacity(0.9),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.chevron_right,
-                      color: Color(0xFF222222),
-                      size: 24,
-                    ),
+                        child: Icon(
+                          Icons.chevron_right,
+                          color: isDark ? Colors.white70 : const Color(0xFF222222),
+                          size: 24,
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -392,22 +417,31 @@ class _BannerCarouselState extends State<BannerCarousel> {
             bottom: 12,
             left: 0,
             right: 0,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(
-                _bannerImages.length,
-                (index) => Container(
-                  width: _currentPage == index ? 24 : 8,
-                  height: 8,
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  decoration: BoxDecoration(
-                    color: _currentPage == index
-                        ? Colors.white
-                        : Colors.white.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(4),
+            child: Builder(
+              builder: (context) {
+                final isDark = Theme.of(context).brightness == Brightness.dark;
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(
+                    _bannerImages.length,
+                    (index) => Container(
+                      width: _currentPage == index ? 24 : 8,
+                      height: 8,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? (_currentPage == index
+                                ? Colors.white
+                                : Colors.white.withOpacity(0.4))
+                            : (_currentPage == index
+                                ? Colors.white
+                                : Colors.white.withOpacity(0.5)),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
         ],

@@ -31,6 +31,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   String? _errorMessage;
   String? _userRole;
   int? _userId;
+  bool _isDescriptionExpanded = false;
+  bool _isAboutExpanded = false;
+  bool _isLoggedIn = false;
 
   @override
   void initState() {
@@ -42,9 +45,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   Future<void> _loadUserInfo() async {
     final role = await StorageService.getUserRole();
     final userId = await StorageService.getUserId();
+    final isLoggedIn = await StorageService.isLoggedIn();
     setState(() {
       _userRole = role;
       _userId = userId;
+      _isLoggedIn = isLoggedIn;
     });
   }
 
@@ -71,6 +76,26 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   bool _isSellerOfProduct() {
     if (_product == null || _userId == null) return false;
     return _product!.sellerId == _userId;
+  }
+
+  // Check if current user is a customer (not a seller or admin)
+  // Returns true for customers, false for sellers and admins
+  bool _isCustomer() {
+    if (_userRole == null) return true; // Default to customer if role is unknown
+    
+    final role = _userRole!.toLowerCase();
+    
+    // Sellers and admins can see seller info and bid history
+    // Customers cannot see these sections
+    if (role == 'seller_products' || 
+        role == 'admin' || 
+        role == 'superadmin' ||
+        role == 'moderator') {
+      return false; // Not a customer - show seller info and bid history
+    }
+    
+    // All other roles (including 'company_products') are treated as customers
+    return true; // Is a customer - hide seller info and bid history
   }
 
   Future<void> _loadProductData() async {
@@ -124,113 +149,39 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         bottom: false,
         child: Column(
           children: [
-            // Sticky Header
+            // App Bar - Clean design matching image
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-                border: Border(
-                  bottom: BorderSide(
-                    color: isDark ? AppColors.slate800 : AppColors.slate200,
-                    width: 1,
-                  ),
-                ),
               ),
               child: Row(
                 children: [
                   IconButton(
                     onPressed: () {
-                      // Check if we can pop, otherwise navigate to home
                       if (context.canPop()) {
                         context.pop();
                       } else {
-                        // If nothing to pop, navigate to home dashboard
                         context.go('/home');
                       }
                     },
                     icon: const Icon(Icons.arrow_back),
-                    style: IconButton.styleFrom(
-                      backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
-                      shape: const CircleBorder(),
+                    color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Product Details',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                          ),
+                      textAlign: TextAlign.center,
                     ),
                   ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () async {
-                      if (_product == null) return;
-                      final productId = _product!.id;
-                      final isInWishlist = await StorageService.isInWishlist(productId);
-                      
-                      if (isInWishlist) {
-                        await StorageService.removeFromWishlist(productId);
-                      } else {
-                        await StorageService.addToWishlist(productId);
-                      }
-                      
-                      setState(() {
-                        _isLiked = !_isLiked;
-                      });
-                    },
-                    icon: Icon(
-                      _isLiked ? Icons.favorite : Icons.favorite_border,
-                      color: _isLiked ? AppColors.red600 : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
-                    ),
-                    style: IconButton.styleFrom(
-                      backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
-                      shape: const CircleBorder(),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
                   IconButton(
                     onPressed: () {},
-                    icon: const Icon(Icons.share),
-                    style: IconButton.styleFrom(
-                      backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
-                      shape: const CircleBorder(),
-                    ),
+                    icon: const Icon(Icons.play_circle_outline, color: Colors.red),
                   ),
-                  // Edit/Delete buttons for seller/superadmin
-                  if (_canEditProduct) ...[
-                    const SizedBox(width: 8),
-                    PopupMenuButton<String>(
-                      icon: Icon(Icons.more_vert, color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      onSelected: (value) async {
-                        if (value == 'edit') {
-                          final productId = int.tryParse(widget.productId);
-                          if (productId != null) {
-                            context.push('/product-creation?productId=$productId');
-                          }
-                        } else if (value == 'delete') {
-                          await _showDeleteConfirmation();
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        PopupMenuItem(
-                          value: 'edit',
-                          child: Row(
-                            children: [
-                              Icon(Icons.edit, size: 20, color: AppColors.primaryBlue),
-                              const SizedBox(width: 12),
-                              const Text('Edit Product'),
-                            ],
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(Icons.delete, size: 20, color: AppColors.red600),
-                              const SizedBox(width: 12),
-                              Text('Delete Product', style: TextStyle(color: AppColors.red600)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -278,47 +229,112 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Image Carousel
+                                  // Image Carousel with Promotional Banner
                                   SizedBox(
                                     height: 400,
-                                    child: PageView.builder(
-                                      itemCount: _images.length,
-                        onPageChanged: (index) {
-                          setState(() {
-                            _currentImageIndex = index;
-                          });
-                        },
-                        itemBuilder: (context, index) {
-                          return Image.network(
-                            ImageUrlHelper.fixImageUrl(_images[index]),
-                            fit: BoxFit.cover,
-                            headers: const {'Accept': 'image/*'},
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Container(
-                                color: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
-                                child: Center(
-                                  child: CircularProgressIndicator(
-                                    value: loadingProgress.expectedTotalBytes != null
-                                        ? loadingProgress.cumulativeBytesLoaded /
-                                            loadingProgress.expectedTotalBytes!
-                                        : null,
-                                    strokeWidth: 2,
-                                    color: AppColors.primaryBlue,
+                                    child: Stack(
+                                      children: [
+                                        PageView.builder(
+                                          itemCount: _images.length,
+                                          onPageChanged: (index) {
+                                            setState(() {
+                                              _currentImageIndex = index;
+                                            });
+                                          },
+                                          itemBuilder: (context, index) {
+                                            return Stack(
+                                              fit: StackFit.expand,
+                                              children: [
+                                                Image.network(
+                                                  ImageUrlHelper.fixImageUrl(_images[index]),
+                                                  fit: BoxFit.cover,
+                                                  headers: const {'Accept': 'image/*'},
+                                                  loadingBuilder: (context, child, loadingProgress) {
+                                                    if (loadingProgress == null) return child;
+                                                    return Container(
+                                                      color: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+                                                      child: Center(
+                                                        child: CircularProgressIndicator(
+                                                          value: loadingProgress.expectedTotalBytes != null
+                                                              ? loadingProgress.cumulativeBytesLoaded /
+                                                                  loadingProgress.expectedTotalBytes!
+                                                              : null,
+                                                          strokeWidth: 2,
+                                                          color: AppColors.primaryBlue,
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                  errorBuilder: (context, error, stackTrace) {
+                                                    return Container(
+                                                      color: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+                                                      child: Icon(Icons.image, size: 64, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+                                                    );
+                                                  },
+                                                ),
+                                              ],
+                                            );
+                                          },
+                                        ),
+                                        // Heart and Share Icons
+                                        Positioned(
+                                          top: 16,
+                                          right: 16,
+                                          child: Row(
+                                            children: [
+                                              Container(
+                                                decoration: BoxDecoration(
+                                                  color: isDark
+                                                      ? Colors.black.withOpacity(0.6)
+                                                      : Colors.white.withOpacity(0.9),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: IconButton(
+                                                  onPressed: () async {
+                                                    if (_product == null) return;
+                                                    final productId = _product!.id;
+                                                    final isInWishlist = await StorageService.isInWishlist(productId);
+                                                    
+                                                    if (isInWishlist) {
+                                                      await StorageService.removeFromWishlist(productId);
+                                                    } else {
+                                                      await StorageService.addToWishlist(productId);
+                                                    }
+                                                    
+                                                    setState(() {
+                                                      _isLiked = !_isLiked;
+                                                    });
+                                                  },
+                                                  icon: Icon(
+                                                    _isLiked ? Icons.favorite : Icons.favorite_border,
+                                                    color: _isLiked 
+                                                        ? AppColors.red600 
+                                                        : (isDark ? Colors.white70 : Colors.black87),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                decoration: BoxDecoration(
+                                                  color: isDark
+                                                      ? Colors.black.withOpacity(0.6)
+                                                      : Colors.white.withOpacity(0.9),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: IconButton(
+                                                  onPressed: () {},
+                                                  icon: Icon(
+                                                    Icons.share, 
+                                                    color: isDark ? Colors.white70 : Colors.black87,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              );
-                            },
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                color: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
-                                child: Icon(Icons.image, size: 64, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
 
                     // Image Indicators
                     Padding(
@@ -348,36 +364,290 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Title and Tags
+                          // Title
                           Text(
                             _product!.title,
                             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.bold,
                                   color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                                 ),
-                            maxLines: 2,
+                            maxLines: 3,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              if (_product!.categoryName != null)
-                                _CategoryTag(
-                                  label: _product!.categoryName!,
-                                  color: AppColors.primaryBlue,
+                          
+                          const SizedBox(height: 16),
+                          
+                          // Login/Register Button - Only show if not logged in
+                          if (!_isLoggedIn)
+                            GestureDetector(
+                              onTap: () {
+                                context.go('/auth');
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? AppColors.warning.withOpacity(0.8) // Dark mode: warning color
+                                      : const Color(0xFFD4A574), // Light mode: Light brown
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
-                              if (_product!.categoryName != null)
-                                const SizedBox(width: 8),
-                              _CategoryTag(
-                                label: _product!.status == 'approved' ? 'Live' : _product!.status,
-                                color: AppColors.green600,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.warning_amber_rounded, color: Colors.white, size: 20),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Login or register',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                          if (!_isLoggedIn) const SizedBox(height: 24),
+                          if (_isLoggedIn) const SizedBox(height: 16),
+
+                          // Time Remaining - Green/Red Box (Red when time is low)
+                          Builder(
+                            builder: (context) {
+                              // Calculate time remaining
+                              Color timerColor = AppColors.green600; // Default green
+                              if (_product!.auctionEndTime != null) {
+                                final now = DateTime.now();
+                                final timeRemaining = _product!.auctionEndTime!.difference(now);
+                                // Change to red if less than 1 hour remaining
+                                if (timeRemaining.inHours < 1) {
+                                  timerColor = Colors.red; // Red when time is low
+                                }
+                              }
+                              
+                              return Row(
+                                children: [
+                                  Text(
+                                    'Time Remaining:',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: timerColor,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: _product!.auctionEndTime != null
+                                        ? CountdownTimer(
+                                            endTime: _product!.auctionEndTime!,
+                                            size: CountdownSize.small,
+                                          )
+                                        : Text(
+                                            '00h 00m 00s',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // Current Bid Card with Bidder Info
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: isDark 
+                                  ? AppColors.slate800.withOpacity(0.8) // Dark mode: dark slate with slight transparency
+                                  : const Color(0xFFE8F5E9), // Light mode: Light green
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isDark
+                                    ? AppColors.green600.withOpacity(0.5)
+                                    : AppColors.green600.withOpacity(0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primaryBlue,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Icon(Icons.gavel, color: Colors.white, size: 20),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Flexible(
+                                                child: Text(
+                                                  _bids.isNotEmpty && _bids.first.bidderName != null
+                                                      ? _bids.first.bidderName!
+                                                      : 'No bids yet',
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                  maxLines: 1,
+                                                ),
+                                              ),
+                                              if (_bids.isNotEmpty) ...[
+                                                const SizedBox(width: 6),
+                                                Icon(Icons.emoji_events, size: 16, color: Colors.amber),
+                                              ],
+                                            ],
+                                          ),
+                                          if (_bids.isNotEmpty && _bids.first.createdAt != null) ...[
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              _formatDate(_bids.first.createdAt!),
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          '\$${_formatCurrency((_product!.currentBid ?? _product!.startingBid ?? _product!.startingPrice).toInt())}',
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.primaryBlue,
+                                          ),
+                                        ),
+                                        Icon(Icons.keyboard_arrow_down, size: 20, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Statistics Cards (Bids, Bidders, Views) - Horizontal Layout
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: 1,
+                                child: _StatCard(
+                                  icon: Icons.gavel,
+                                  label: 'Bids',
+                                  value: '${_product!.totalBids ?? 0}',
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 1,
+                                child: _StatCard(
+                                  icon: Icons.people,
+                                  label: 'Bidders',
+                                  value: '${_bids.map((b) => b.userId).toSet().length}',
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 1,
+                                child: _StatCard(
+                                  icon: Icons.visibility,
+                                  label: 'Views',
+                                  value: '0', // Views not available in ProductModel
+                                ),
                               ),
                             ],
                           ),
 
                           const SizedBox(height: 24),
 
-                          // Bid Info Card
+                          // Product Details Section - Visible to ALL users
+                          Text(
+                            'Product details',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                ),
+                          ),
+                          const SizedBox(height: 12),
+                          // Guarantee Info Card
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppColors.slate800.withOpacity(0.8) // Dark mode: dark slate
+                                  : const Color(0xFFE3F2FD), // Light mode: Light blue
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isDark
+                                    ? AppColors.primaryBlue.withOpacity(0.5)
+                                    : AppColors.primaryBlue.withOpacity(0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? AppColors.slate700
+                                        : Colors.white,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.info_outline,
+                                    color: AppColors.primaryBlue,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'This product has a 7 days Guarantee.',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          
+                          const SizedBox(height: 16),
+                          
+                          // Product Info Details
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
@@ -393,109 +663,82 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             ),
                             child: Column(
                               children: [
+                                // Product ID
                                 Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Current Bid',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                                            fontWeight: FontWeight.w400,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.baseline,
-                                          textBaseline: TextBaseline.alphabetic,
-                                          children: [
-                                            Text(
-                                              '\$',
-                                              style: TextStyle(
-                                                fontSize: 14,
-                                                color: AppColors.primaryBlue,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            Text(
-                                              _formatCurrency(
-                                                  (_product!.currentBid ?? _product!.startingBid ?? _product!.startingPrice).toInt()),
-                                              style: TextStyle(
-                                                fontSize: 24,
-                                                fontWeight: FontWeight.bold,
-                                                color: AppColors.primaryBlue,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
+                                    Text(
+                                      'Product ID',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                        fontWeight: FontWeight.w400,
+                                      ),
                                     ),
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                    Text(
+                                      '#${_product!.id}',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                // Real Price
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Real Price',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                    ),
+                                    Row(
+                                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                                      textBaseline: TextBaseline.alphabetic,
                                       children: [
                                         Text(
-                                          'Time Left',
+                                          '\$',
                                           style: TextStyle(
-                                            fontSize: 12,
-                                            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                                            fontWeight: FontWeight.w400,
+                                            fontSize: 14,
+                                            color: AppColors.primaryBlue,
+                                            fontWeight: FontWeight.bold,
                                           ),
                                         ),
-                                        const SizedBox(height: 4),
-                                        if (_product!.auctionEndTime != null)
-                                          CountdownTimer(
-                                            endTime: _product!.auctionEndTime!,
-                                            size: CountdownSize.medium,
-                                          )
-                                        else
-                                          Text(
-                                            'Auction ended',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                                            ),
+                                        Text(
+                                          _formatCurrency(
+                                            (_product!.currentPrice ?? _product!.startingPrice).toInt()
                                           ),
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.primaryBlue,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 12),
+                                // Product Condition
                                 Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Icon(
-                                      Icons.trending_up,
-                                      size: 16,
-                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                                    ),
-                                    const SizedBox(width: 4),
                                     Text(
-                                      '${_product!.totalBids ?? 0} bids',
+                                      'Condition',
                                       style: TextStyle(
-                                        fontSize: 12,
+                                        fontSize: 14,
                                         color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                         fontWeight: FontWeight.w400,
                                       ),
                                     ),
-                                    const SizedBox(width: 16),
-                                    Icon(
-                                      Icons.access_time,
-                                      size: 16,
-                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Starting: \$${_formatCurrency((_product!.startingBid ?? _product!.startingPrice).toInt())}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                                        fontWeight: FontWeight.w400,
-                                      ),
+                                    _ConditionTag(
+                                      condition: _product!.condition,
                                     ),
                                   ],
                                 ),
@@ -505,17 +748,128 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
                           const SizedBox(height: 24),
 
-                          // Seller Information
-                          Text(
-                            'Seller Information',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-                                ),
-                          ),
-                          const SizedBox(height: 12),
+                          // Seller Information - HIDDEN for customers
+                          if (!_isCustomer()) ...[
+                            Text(
+                              'Seller Information',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                  ),
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.06),
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 24,
+                                    backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
+                                    child: Text(
+                                      _product!.sellerName?.substring(0, 1).toUpperCase() ?? 'S',
+                                      style: TextStyle(
+                                        color: AppColors.primaryBlue,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Flexible(
+                                              child: Text(
+                                                _product!.sellerName ?? 'Seller',
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        if (_product!.sellerEmail != null)
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                Icons.email,
+                                                size: 12,
+                                                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Flexible(
+                                                child: Text(
+                                                  _product!.sellerEmail!,
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        if (_product!.sellerPhone != null)
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 4),
+                                            child: Row(
+                                              children: [
+                                                Icon(
+                                                  Icons.phone,
+                                                  size: 12,
+                                                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Flexible(
+                                                  child: Text(
+                                                    _product!.sellerPhone!,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                                    ),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    onPressed: () {},
+                                    icon: const Icon(Icons.person_outline),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
+                                      shape: const CircleBorder(),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+
+                          // Description Section (Expandable Card)
                           Container(
-                            padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
                               borderRadius: BorderRadius.circular(12),
@@ -527,218 +881,229 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 ),
                               ],
                             ),
-                            child: Row(
+                            child: Column(
                               children: [
-                                CircleAvatar(
-                                  radius: 24,
-                                  backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
-                                  child: Text(
-                                    _product!.sellerName?.substring(0, 1).toUpperCase() ?? 'S',
-                                    style: TextStyle(
-                                      color: AppColors.primaryBlue,
-                                      fontWeight: FontWeight.bold,
+                                InkWell(
+                                  onTap: () {
+                                    setState(() {
+                                      _isDescriptionExpanded = !_isDescriptionExpanded;
+                                    });
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'Discription',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                          ),
+                                        ),
+                                        Icon(
+                                          _isDescriptionExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                            Text(
-                                            _product!.sellerName ?? 'Seller',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-                                            ),
+                                if (_isDescriptionExpanded) ...[
+                                  Divider(
+                                    height: 1,
+                                    color: isDark ? AppColors.slate800 : AppColors.slate200,
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      children: [
+                                        _buildInfoRow('brand', _extractBrand(_product!.title) ?? 'Others'),
+                                        const SizedBox(height: 12),
+                                        _buildInfoRow('Model Name', _extractModel(_product!.title) ?? _product!.title),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // About this Item Section (Expandable Card)
+                          Container(
+                            decoration: BoxDecoration(
+                              color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.06),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              children: [
+                                InkWell(
+                                  onTap: () {
+                                    setState(() {
+                                      _isAboutExpanded = !_isAboutExpanded;
+                                    });
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'About this Item',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                                           ),
-                                        ],
+                                        ),
+                                        Icon(
+                                          _isAboutExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                                          color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                if (_isAboutExpanded) ...[
+                                  Divider(
+                                    height: 1,
+                                    color: isDark ? AppColors.slate800 : AppColors.slate200,
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Text(
+                                      _product!.description ?? 'No description provided',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                        height: 1.6,
                                       ),
-                                      const SizedBox(height: 4),
-                                      if (_product!.sellerEmail != null)
-                                        Row(
-                                          children: [
-                                            Icon(
-                                              Icons.email,
-                                              size: 12,
-                                              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              _product!.sellerEmail!,
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      if (_product!.sellerPhone != null)
-                                        Padding(
-                                          padding: const EdgeInsets.only(top: 4),
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                Icons.phone,
-                                                size: 12,
-                                                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                _product!.sellerPhone!,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                    ],
+                                    ),
                                   ),
-                                ),
-                                IconButton(
-                                  onPressed: () {},
-                                  icon: const Icon(Icons.person_outline),
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: isDark ? AppColors.slate800 : AppColors.slate100,
-                                    shape: const CircleBorder(),
-                                  ),
-                                ),
+                                ],
                               ],
                             ),
                           ),
 
                           const SizedBox(height: 24),
 
-                          // Description
-                          Text(
-                            'Description',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-                                ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            _product!.description ?? 'No description provided',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-                              height: 1.6,
+                          // Bid History - HIDDEN for customers
+                          if (!_isCustomer()) ...[
+                            Text(
+                              'Bid History',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                  ),
                             ),
-                          ),
-
-                          const SizedBox(height: 24),
-
-                          // Bid History
-                          Text(
-                            'Bid History',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                            const SizedBox(height: 12),
+                            if (_bids.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Text(
+                                  'No bids yet. Be the first to bid!',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                  ),
+                                  textAlign: TextAlign.center,
                                 ),
-                          ),
-                          const SizedBox(height: 12),
-                          if (_bids.isEmpty)
-                            Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Text(
-                                'No bids yet. Be the first to bid!',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            )
-                          else
-                            RepaintBoundary(
-                              child: ListView.separated(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: _bids.length,
-                                separatorBuilder: (context, index) => const SizedBox(height: 8),
-                                itemBuilder: (context, index) {
-                                  final bid = _bids[index];
-                                  final timeAgo = _formatTimeAgo(bid.createdAt);
-                                  return RepaintBoundary(
-                                    child: Container(
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-                                        borderRadius: BorderRadius.circular(12),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(0.06),
-                                            blurRadius: 16,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Container(
-                                            width: 32,
-                                            height: 32,
-                                            decoration: BoxDecoration(
-                                              color: isDark ? AppColors.slate800 : AppColors.slate100,
-                                              shape: BoxShape.circle,
+                              )
+                            else
+                              RepaintBoundary(
+                                child: ListView.separated(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: _bids.length,
+                                  separatorBuilder: (context, index) => const SizedBox(height: 8),
+                                  itemBuilder: (context, index) {
+                                    final bid = _bids[index];
+                                    final timeAgo = _formatTimeAgo(bid.createdAt);
+                                    return RepaintBoundary(
+                                      child: Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                                          borderRadius: BorderRadius.circular(12),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.06),
+                                              blurRadius: 16,
+                                              offset: const Offset(0, 2),
                                             ),
-                                            child: Center(
-                                              child: Text(
-                                                bid.bidderName?.substring(0, 1).toUpperCase() ?? 'B',
-                                                style: TextStyle(
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: AppColors.primaryBlue,
+                                          ],
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              width: 32,
+                                              height: 32,
+                                              decoration: BoxDecoration(
+                                                color: isDark ? AppColors.slate800 : AppColors.slate100,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: Center(
+                                                child: Text(
+                                                  bid.bidderName?.substring(0, 1).toUpperCase() ?? 'B',
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppColors.primaryBlue,
+                                                  ),
                                                 ),
                                               ),
                                             ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  bid.bidderName ?? 'Anonymous',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w500,
-                                                    color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    bid.bidderName ?? 'Anonymous',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w500,
+                                                      color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                                    ),
                                                   ),
-                                                ),
-                                                Text(
-                                                  timeAgo,
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                                  Text(
+                                                    timeAgo,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                                    ),
                                                   ),
-                                                ),
-                                              ],
+                                                ],
+                                              ),
                                             ),
-                                          ),
-                                          Text(
-                                            '\$${_formatCurrency(bid.amount.toInt())}',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                              color: AppColors.primaryBlue,
+                                            Text(
+                                              '\$${_formatCurrency(bid.amount.toInt())}',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.primaryBlue,
+                                              ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  );
-                                },
+                                    );
+                                  },
+                                ),
                               ),
-                            ),
+                            const SizedBox(height: 24),
+                          ],
 
                           const SizedBox(height: 100), // Space for bottom button
                         ],
@@ -904,6 +1269,66 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     }
   }
 
+  String _formatDate(DateTime dateTime) {
+    return '${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Helper methods to extract brand and model from product title
+  String? _extractBrand(String title) {
+    // Try to extract brand from title (common brands)
+    final brands = ['JBL', 'Sony', 'Samsung', 'Apple', 'LG', 'Bose', 'Nike', 'Adidas'];
+    for (var brand in brands) {
+      if (title.toUpperCase().contains(brand.toUpperCase())) {
+        return brand;
+      }
+    }
+    return null;
+  }
+
+  String? _extractModel(String title) {
+    // Try to extract model name from title
+    // If title contains brand, return the part after brand
+    final brands = ['JBL', 'Sony', 'Samsung', 'Apple', 'LG', 'Bose', 'Nike', 'Adidas'];
+    for (var brand in brands) {
+      if (title.toUpperCase().contains(brand.toUpperCase())) {
+        final parts = title.split(RegExp(brand, caseSensitive: false));
+        if (parts.length > 1) {
+          return parts[1].trim().isEmpty ? title : parts[1].trim();
+        }
+      }
+    }
+    // If no brand found, return first few words as model
+    final words = title.split(' ');
+    if (words.length > 1) {
+      return words.take(2).join(' ');
+    }
+    return null;
+  }
+
   Future<void> _showDeleteConfirmation() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1012,4 +1437,131 @@ class _CategoryTag extends StatelessWidget {
     );
   }
 }
+
+class _StatCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _StatCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            size: 20,
+            color: AppColors.primaryBlue,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConditionTag extends StatelessWidget {
+  final String? condition;
+
+  const _ConditionTag({
+    required this.condition,
+  });
+
+  Color _getConditionColor(String? condition) {
+    if (condition == null) return AppColors.slate400;
+    switch (condition.toLowerCase()) {
+      case 'new':
+        return AppColors.green600;
+      case 'used':
+        return AppColors.warning;
+      case 'working':
+        return AppColors.blue600;
+      default:
+        return AppColors.slate400;
+    }
+  }
+
+  String _getConditionLabel(String? condition) {
+    if (condition == null || condition.isEmpty) return 'Not Specified';
+    switch (condition.toLowerCase()) {
+      case 'new':
+        return 'New';
+      case 'used':
+        return 'Used';
+      case 'working':
+        return 'Working';
+      default:
+        return condition;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final conditionColor = _getConditionColor(condition);
+    final conditionLabel = _getConditionLabel(condition);
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: conditionColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: conditionColor.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Text(
+        conditionLabel,
+        style: TextStyle(
+          fontSize: 12,
+          color: conditionColor,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
 

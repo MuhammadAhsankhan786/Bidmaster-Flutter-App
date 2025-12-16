@@ -5,6 +5,7 @@ import '../services/theme_service.dart';
 import '../services/language_service.dart';
 import '../services/app_localizations.dart';
 import 'package:share_plus/share_plus.dart';
+import 'theme_toggle_tile.dart';
 
 class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key});
@@ -193,6 +194,11 @@ class _AppDrawerState extends State<AppDrawer> {
                       _shareApp();
                     },
                   ),
+
+                  Divider(height: 1, color: isDark ? const Color(0xFF444444) : const Color(0xFFE5E7EB)),
+
+                  // Theme Toggle (Light/Dark Mode)
+                  const ThemeToggleTile(),
 
                   Divider(height: 1, color: isDark ? const Color(0xFF444444) : const Color(0xFFE5E7EB)),
 

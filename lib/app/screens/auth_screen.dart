@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import '../theme/colors.dart';
@@ -36,6 +37,7 @@ class _AuthScreenState extends State<AuthScreen> {
   int _otpAttempts = 0;
   String _normalizedPhone = ''; // Store normalized phone for verification
   String _referralCode = ''; // Store referral code for OTP verification
+  bool _acceptedTerms = false; // Terms and Conditions acceptance
 
   static const int _maxOTPAttempts = 5;
 
@@ -928,13 +930,79 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
 
+        const SizedBox(height: 16),
+
+        // Terms and Conditions Checkbox
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Checkbox(
+              value: _acceptedTerms,
+              onChanged: (value) {
+                setState(() {
+                  _acceptedTerms = value ?? false;
+                });
+              },
+              activeColor: colorScheme.primary,
+            ),
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _acceptedTerms = !_acceptedTerms;
+                  });
+                },
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: RichText(
+                    text: TextSpan(
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurface.withOpacity(0.7),
+                            fontSize: 12,
+                          ),
+                      children: [
+                        const TextSpan(text: 'I agree to the '),
+                        TextSpan(
+                          text: 'Terms and Conditions',
+                          style: TextStyle(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                            decoration: TextDecoration.underline,
+                          ),
+                          recognizer: TapGestureRecognizer()
+                            ..onTap = () {
+                              context.push('/terms-and-conditions');
+                            },
+                        ),
+                        const TextSpan(text: ' and '),
+                        TextSpan(
+                          text: 'Privacy Policy',
+                          style: TextStyle(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                            decoration: TextDecoration.underline,
+                          ),
+                          recognizer: TapGestureRecognizer()
+                            ..onTap = () {
+                              context.push('/privacy-policy');
+                            },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+
         const SizedBox(height: 24),
 
         // Send OTP Button
         SizedBox(
           height: 48,
           child: ElevatedButton(
-            onPressed: _isLoading || !_isPhoneValid
+            onPressed: _isLoading || !_isPhoneValid || !_acceptedTerms
                 ? null
                 : _handlePhoneSubmit,
             style: ElevatedButton.styleFrom(

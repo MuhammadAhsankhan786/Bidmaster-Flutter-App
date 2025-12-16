@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:animations/animations.dart';
 import 'colors.dart';
 import 'typography.dart';
+import '../utils/app_animations.dart';
 
 /// Light theme configuration
 class AppTheme {
@@ -9,6 +11,12 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.light,
       fontFamily: AppTypography.fontFamily,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: FadeThroughPageTransitionsBuilder(),
+          TargetPlatform.iOS: FadeThroughPageTransitionsBuilder(),
+        },
+      ),
       
       // Color scheme - Blue + White Theme
       colorScheme: ColorScheme.light(
@@ -142,6 +150,12 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.dark,
       fontFamily: AppTypography.fontFamily,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: FadeThroughPageTransitionsBuilder(),
+          TargetPlatform.iOS: FadeThroughPageTransitionsBuilder(),
+        },
+      ),
       
       // Color scheme - Blue + White Theme (Dark Mode)
       colorScheme: ColorScheme.dark(

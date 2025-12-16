@@ -127,12 +127,16 @@ class CategoryChips extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colorScheme = Theme.of(context).colorScheme;
     
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    // Always show at least 'All' category, even if list is empty
+    final displayCategories = categories.isEmpty ? ['All'] : categories;
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(
-          children: categories.map((category) {
+          children: displayCategories.map((category) {
             final isSelected = selectedCategory == category;
             final isAllCategory = category == 'All';
             

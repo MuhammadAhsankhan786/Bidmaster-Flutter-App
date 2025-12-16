@@ -115,23 +115,21 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       
       if (userRole == 'seller_products') {
-        // Seller role: Show seller's own products (getMyProducts)
-        final myProducts = await apiService.getMyProducts();
-        
+        // Seller role: Redirect to seller dashboard instead of showing products here
+        if (mounted && context.mounted) {
+          context.go('/seller-dashboard');
+        }
         setState(() {
-          if (reset) {
-            _products = myProducts;
-          } else {
-            _products.addAll(myProducts);
-          }
-          _hasMore = false; // getMyProducts doesn't have pagination
           _isLoading = false;
         });
+        return; // Don't load products on home screen for sellers
       } else {
         // Company/Buyer role: Show all products (getAllProducts)
+        // If search query exists, search in products; otherwise use category filter
+        final searchQuery = _searchController.text.trim();
         final result = await apiService.getAllProducts(
           category: _selectedCategory == 'All' ? null : _selectedCategory,
-          search: _searchController.text.isEmpty ? null : _searchController.text,
+          search: searchQuery.isEmpty ? null : searchQuery,
           page: _currentPage,
           limit: 20,
         );
@@ -143,25 +141,36 @@ class _HomeScreenState extends State<HomeScreen> {
         final currentUserId = await StorageService.getUserId();
 
         setState(() {
+          List<ProductModel> filteredProducts = newProducts;
+          
+          // Apply client-side search filter (search in title, description, and category name)
+          if (searchQuery.isNotEmpty) {
+            final searchLower = searchQuery.toLowerCase();
+            filteredProducts = filteredProducts.where((product) {
+              // Search in title
+              if (product.title.toLowerCase().contains(searchLower)) return true;
+              // Search in description
+              if (product.description?.toLowerCase().contains(searchLower) ?? false) return true;
+              // Search in category name
+              if (product.categoryName?.toLowerCase().contains(searchLower) ?? false) return true;
+              return false;
+            }).toList();
+          }
+          
+          // Filter: When viewing as company_products, exclude products created by current user (if they're also a seller)
+          // This ensures same product doesn't appear in both lists
+          filteredProducts = filteredProducts.where((product) {
+            // If user has seller products, exclude their own products from company view
+            if (currentUserId != null && product.sellerId == currentUserId) {
+              return false; // Don't show seller's own products in company products view
+            }
+            return true;
+          }).toList();
+          
           if (reset) {
-            // Filter: When viewing as company_products, exclude products created by current user (if they're also a seller)
-            // This ensures same product doesn't appear in both lists
-            _products = newProducts.where((product) {
-              // If user has seller products, exclude their own products from company view
-              if (currentUserId != null && product.sellerId == currentUserId) {
-                return false; // Don't show seller's own products in company products view
-              }
-              return true;
-            }).toList();
+            _products = filteredProducts;
           } else {
-            // Same filter for pagination
-            final filtered = newProducts.where((product) {
-              if (currentUserId != null && product.sellerId == currentUserId) {
-                return false;
-              }
-              return true;
-            }).toList();
-            _products.addAll(filtered);
+            _products.addAll(filteredProducts);
           }
           _currentPage = pagination['page'] as int;
           _hasMore = _currentPage < (pagination['pages'] as int);
@@ -336,16 +345,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       drawer: const AppDrawer(),
-      floatingActionButton: _currentUserRole == 'seller_products'
-          ? FloatingActionButton(
-              onPressed: () {
-                context.push('/product-create');
-              },
-              backgroundColor: colorScheme.primary,
-              child: const Icon(Icons.add_rounded, color: Colors.white),
-              tooltip: 'Add Product',
-            )
-          : null,
+      // Floating button removed - now in AppBar for sellers
       body: SafeArea(
         child: Column(
           children: [

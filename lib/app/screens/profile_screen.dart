@@ -6,7 +6,6 @@ import '../services/api_service.dart';
 import '../theme/colors.dart';
 import '../widgets/user_info_card.dart';
 import '../widgets/reward_balance_card.dart';
-import '../widgets/theme_toggle_tile.dart';
 import 'invite_and_earn_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -346,25 +345,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
                           const SizedBox(height: 12),
-
-                          // Theme Toggle
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: colorScheme.surface,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
-                                  blurRadius: 16,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: const ThemeToggleTile(),
-                          ),
-
-                          const SizedBox(height: 8),
 
                           // Logout Button
                           Container(

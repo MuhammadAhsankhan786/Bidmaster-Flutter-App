@@ -18,6 +18,8 @@ import '../screens/seller_winner_details_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/wishlist_screen.dart';
 import '../screens/wins_screen.dart';
+import '../screens/terms_and_conditions_screen.dart';
+import '../screens/privacy_policy_screen.dart';
 import '../models/product_model.dart';
 import '../services/storage_service.dart';
 
@@ -42,6 +44,11 @@ class AppRouter {
       // Signup route - public access (for new user registration)
       if (location == '/signup') {
         return null; // Allow public access to signup
+      }
+
+      // Terms and Conditions and Privacy Policy - public access (no login required)
+      if (location == '/terms-and-conditions' || location == '/privacy-policy') {
+        return null; // Allow public access to view terms and privacy policy
       }
 
       // Role selection - accessible for signup flow or after OTP verification
@@ -244,6 +251,16 @@ class AppRouter {
         path: '/wins',
         name: 'wins',
         builder: (context, state) => const WinsScreen(),
+      ),
+      GoRoute(
+        path: '/terms-and-conditions',
+        name: 'terms-and-conditions',
+        builder: (context, state) => const TermsAndConditionsScreen(),
+      ),
+      GoRoute(
+        path: '/privacy-policy',
+        name: 'privacy-policy',
+        builder: (context, state) => const PrivacyPolicyScreen(),
       ),
     ],
   );
