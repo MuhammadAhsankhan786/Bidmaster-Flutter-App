@@ -42,32 +42,16 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   List<StatData> get _stats {
     final activeProducts = _products.where((p) => p.status == 'approved').length;
     final pendingProducts = _products.where((p) => p.status == 'pending').length;
-    final totalBids = _products.fold<int>(0, (sum, p) => sum + (p.totalBids ?? 0));
-    final totalEarnings = _products
-        .where((p) => p.status == 'sold')
-        .fold<double>(0, (sum, p) => sum + (p.currentBid ?? p.startingPrice));
 
+    // Simplified stats - removed Total Earnings and Total Bids
+    // Seller dashboard is for listing management only, not analytics
     return [
-      StatData(
-        label: 'Total Earnings',
-        value: '\$${_formatCurrency(totalEarnings.toInt())}',
-        change: pendingProducts > 0 ? '$pendingProducts pending' : 'All approved',
-        icon: Icons.account_balance_wallet_rounded,
-        gradientColors: [AppColors.primaryBlue, AppColors.darkBlue],
-      ),
       StatData(
         label: 'Active Listings',
         value: '$activeProducts',
         change: pendingProducts > 0 ? '$pendingProducts pending' : 'All active',
         icon: Icons.inventory_2_rounded,
         gradientColors: [AppColors.blue500, AppColors.blue600],
-      ),
-      StatData(
-        label: 'Total Bids',
-        value: '$totalBids',
-        change: 'Across all listings',
-        icon: Icons.trending_up_rounded,
-        gradientColors: [AppColors.lightBlue, AppColors.primaryBlue],
       ),
     ];
   }
@@ -903,7 +887,9 @@ class _ListingCard extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            if (product.auctionEndTime != null)
+                            // Show countdown only if product is approved
+                            // Pending products should show "Waiting for approval"
+                            if (product.status == 'approved' && product.auctionEndTime != null)
                               CountdownTimer(
                                 endTime: product.auctionEndTime!,
                                 size: CountdownSize.small,
@@ -915,7 +901,7 @@ class _ListingCard extends StatelessWidget {
                   else
                     Text(
                       product.status == 'pending'
-                          ? 'Awaiting admin approval'
+                          ? 'Waiting for approval'
                           : 'Status: ${product.status}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: isDark

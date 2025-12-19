@@ -27,7 +27,7 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
   final _imagePicker = ImagePicker();
   
   bool _isLoading = false;
-  int _duration = 7;
+  int _duration = 1; // Default to 1 day, must be 1, 2, or 3
   File? _selectedImage;
   Uint8List? _selectedImageBytes;
   String? _existingImageUrl; // Store existing image URL for edit mode
@@ -314,6 +314,45 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
         });
       }
     }
+  }
+
+  Widget _buildDurationButton(int days, String label) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isSelected = _duration == days;
+    
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _duration = days;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.blue600
+              : (isDark ? AppColors.slate800 : AppColors.slate100),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.blue600
+                : (isDark ? AppColors.slate700 : AppColors.slate300),
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isSelected
+                  ? AppColors.cardWhite
+                  : (isDark ? AppColors.slate300 : AppColors.slate700),
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -631,6 +670,7 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
                 const SizedBox(height: 16),
 
                 // Duration (only show for new products, not when editing)
+                // Fixed options: 1, 2, or 3 days only
                 if (!isEditMode) ...[
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -648,22 +688,19 @@ class _ProductCreationScreenState extends State<ProductCreationScreen> {
                           'Auction Duration',
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 12),
                         Row(
                           children: [
                             Expanded(
-                              child: Text('$_duration days'),
+                              child: _buildDurationButton(1, '1 Day'),
                             ),
-                            Slider(
-                              value: _duration.toDouble(),
-                              min: 1,
-                              max: 30,
-                              divisions: 29,
-                              onChanged: (value) {
-                                setState(() {
-                                  _duration = value.toInt();
-                                });
-                              },
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildDurationButton(2, '2 Days'),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildDurationButton(3, '3 Days'),
                             ),
                           ],
                         ),
