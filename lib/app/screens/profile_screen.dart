@@ -9,9 +9,7 @@ import '../widgets/reward_balance_card.dart';
 import 'invite_and_earn_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  final bool scrollToSettings;
-  
-  const ProfileScreen({super.key, this.scrollToSettings = false});
+  const ProfileScreen({super.key});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -26,43 +24,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _userRole;
   bool _isLoading = true;
   final ScrollController _scrollController = ScrollController();
-  final GlobalKey _settingsKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
   }
-  
-  void _handleScrollToSettings() {
-    // Wait for data to load and widget to be built, then scroll
-    if (widget.scrollToSettings && !_isLoading) {
-      // Use multiple post-frame callbacks to ensure widget is fully built
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Future.delayed(const Duration(milliseconds: 300), () {
-          _scrollToSettings();
-        });
-      });
-    }
-  }
 
   @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
-  }
-
-  void _scrollToSettings() {
-    // Wait for the widget to be built, then scroll
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_settingsKey.currentContext != null) {
-        Scrollable.ensureVisible(
-          _settingsKey.currentContext!,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOut,
-        );
-      }
-    });
   }
 
   Future<void> _loadUserData() async {
@@ -87,11 +59,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _userRole = role;
         _isLoading = false;
       });
-      
-      // If scrollToSettings is requested, scroll after data is loaded
-      if (widget.scrollToSettings) {
-        _handleScrollToSettings();
-      }
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -122,13 +89,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.settings, color: colorScheme.onSurface),
-            tooltip: 'Settings',
-            onPressed: _scrollToSettings,
-          ),
-        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -320,100 +280,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             onTap: () {
                               context.push('/buyer-bidding-history');
                             },
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Settings Section - BestBid Style
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            key: _settingsKey,
-                            child: Text(
-                              'Settings',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: colorScheme.onSurface,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Logout Button
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: colorScheme.surface,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
-                                  blurRadius: 16,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: AppColors.error.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: AppColors.error.withOpacity(0.2),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.logout_rounded,
-                                  color: AppColors.error,
-                                  size: 22,
-                                ),
-                              ),
-                              title: const Text(
-                                'Logout',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.error,
-                                ),
-                              ),
-                              onTap: () async {
-                                final shouldLogout = await showDialog<bool>(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    title: const Text('Logout'),
-                                    content: const Text('Are you sure you want to logout?'),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context, false),
-                                        child: const Text('Cancel'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context, true),
-                                        child: const Text('Logout', style: TextStyle(color: AppColors.error)),
-                                      ),
-                                    ],
-                                  ),
-                                );
-
-                                if (shouldLogout == true && mounted) {
-                                  await StorageService.clearAll();
-                                  if (mounted) {
-                                    context.go('/auth');
-                                  }
-                                }
-                              },
-                            ),
                           ),
                         ],
                       ),

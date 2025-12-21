@@ -212,11 +212,7 @@ class AppRouter {
       GoRoute(
         path: '/profile',
         name: 'profile',
-        builder: (context, state) {
-          // Check if scrollToSettings query parameter is present
-          final scrollToSettings = state.uri.queryParameters['scrollToSettings'] == 'true';
-          return ProfileScreen(scrollToSettings: scrollToSettings);
-        },
+        builder: (context, state) => const ProfileScreen(),
       ),
       GoRoute(
         path: '/buyer/bidding-history',

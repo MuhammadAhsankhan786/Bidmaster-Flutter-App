@@ -199,7 +199,7 @@ class _BuyerDashboardScreenState extends State<BuyerDashboardScreen> {
               subtitle: const Text('Change between Buyer and Seller'),
               onTap: () {
                 Navigator.pop(context);
-                context.push('/profile?scrollToSettings=true');
+                context.push('/role-selection');
               },
             ),
             ListTile(

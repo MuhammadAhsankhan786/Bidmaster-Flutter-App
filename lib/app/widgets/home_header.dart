@@ -632,6 +632,7 @@ class _SearchBoxState extends State<_SearchBox> with SingleTickerProviderStateMi
                       ),
                       onPressed: () {
                         widget.controller?.clear();
+                        // Trigger search reload to show all products
                         widget.onSearchSubmitted?.call();
                         // Resume animation
                         _animationController.forward();

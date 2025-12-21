@@ -80,13 +80,24 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  String _lastSearchQuery = '';
+  
   void _onSearchChanged() {
-    // Debounce search - reload after user stops typing
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (_searchController.text == _searchController.text) {
-        _loadProducts(reset: true);
-      }
-    });
+    final currentQuery = _searchController.text.trim();
+    // Only reload if search query actually changed
+    if (currentQuery != _lastSearchQuery) {
+      _lastSearchQuery = currentQuery;
+      // Debounce search - reload after user stops typing
+      Future.delayed(const Duration(milliseconds: 500), () {
+        // Check if query hasn't changed during debounce delay
+        final finalQuery = _searchController.text.trim();
+        if (finalQuery == currentQuery) {
+          // Update last search query to prevent duplicate calls
+          _lastSearchQuery = finalQuery;
+          _loadProducts(reset: true);
+        }
+      });
+    }
   }
 
   Future<void> _loadProducts({bool reset = false}) async {
@@ -143,17 +154,19 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           List<ProductModel> filteredProducts = newProducts;
           
-          // Apply client-side search filter (search in title, description, and category name)
+          // Apply strict client-side search filter - ONLY show products that match search query
           if (searchQuery.isNotEmpty) {
-            final searchLower = searchQuery.toLowerCase();
+            final searchLower = searchQuery.toLowerCase().trim();
             filteredProducts = filteredProducts.where((product) {
-              // Search in title
-              if (product.title.toLowerCase().contains(searchLower)) return true;
-              // Search in description
-              if (product.description?.toLowerCase().contains(searchLower) ?? false) return true;
-              // Search in category name
-              if (product.categoryName?.toLowerCase().contains(searchLower) ?? false) return true;
-              return false;
+              // Search in title (case-insensitive)
+              final titleMatch = product.title.toLowerCase().contains(searchLower);
+              // Search in description (case-insensitive)
+              final descMatch = product.description?.toLowerCase().contains(searchLower) ?? false;
+              // Search in category name (case-insensitive)
+              final categoryMatch = product.categoryName?.toLowerCase().contains(searchLower) ?? false;
+              
+              // Only return products that match at least one field
+              return titleMatch || descMatch || categoryMatch;
             }).toList();
           }
           
@@ -167,9 +180,12 @@ class _HomeScreenState extends State<HomeScreen> {
             return true;
           }).toList();
           
-          if (reset) {
+          if (reset || searchQuery.isNotEmpty) {
+            // When resetting or when search is active, replace all products
+            // This ensures only matching products are shown
             _products = filteredProducts;
           } else {
+            // Only add products when not searching (for pagination)
             _products.addAll(filteredProducts);
           }
           _currentPage = pagination['page'] as int;
@@ -187,8 +203,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<ProductModel> get _filteredProducts {
     final now = DateTime.now();
-    // Filter out products where bidding has ended (auctionEndTime < now)
-    return _products.where((product) {
+    final searchQuery = _searchController.text.trim().toLowerCase();
+    
+    // First filter by search query if active
+    var filtered = _products;
+    if (searchQuery.isNotEmpty) {
+      filtered = filtered.where((product) {
+        // Search in title (case-insensitive)
+        final titleMatch = product.title.toLowerCase().contains(searchQuery);
+        // Search in description (case-insensitive)
+        final descMatch = product.description?.toLowerCase().contains(searchQuery) ?? false;
+        // Search in category name (case-insensitive)
+        final categoryMatch = product.categoryName?.toLowerCase().contains(searchQuery) ?? false;
+        
+        // Only return products that match at least one field
+        return titleMatch || descMatch || categoryMatch;
+      }).toList();
+    }
+    
+    // Then filter out products where bidding has ended (auctionEndTime < now)
+    return filtered.where((product) {
       if (product.auctionEndTime == null) {
         // If no end time, keep the product (might be pending)
         return true;

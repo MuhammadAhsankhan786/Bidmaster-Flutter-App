@@ -178,10 +178,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       textAlign: TextAlign.center,
                     ),
                   ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(Icons.play_circle_outline, color: Colors.red),
-                  ),
                 ],
               ),
             ),
@@ -310,22 +306,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                                     color: _isLiked 
                                                         ? AppColors.red600 
                                                         : (isDark ? Colors.white70 : Colors.black87),
-                                                  ),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Container(
-                                                decoration: BoxDecoration(
-                                                  color: isDark
-                                                      ? Colors.black.withOpacity(0.6)
-                                                      : Colors.white.withOpacity(0.9),
-                                                  shape: BoxShape.circle,
-                                                ),
-                                                child: IconButton(
-                                                  onPressed: () {},
-                                                  icon: Icon(
-                                                    Icons.share, 
-                                                    color: isDark ? Colors.white70 : Colors.black87,
                                                   ),
                                                 ),
                                               ),
