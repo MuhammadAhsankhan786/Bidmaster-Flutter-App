@@ -351,7 +351,7 @@ Start earning today! 💰
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Earn \$1 for each successful referral!',
+                                  'Earn \$1 when someone signs up with your code!\nThey get \$2 as a welcome bonus.',
                                   style: Theme.of(context).textTheme.bodySmall,
                                   textAlign: TextAlign.center,
                                 ),

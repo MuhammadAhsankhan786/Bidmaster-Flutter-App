@@ -142,7 +142,8 @@ class _MyAppState extends State<MyApp> {
           valueListenable: LanguageService.languageNotifier,
           builder: (context, locale, child) {
             // Determine text direction based on locale
-            final textDirection = locale.languageCode == 'ar' 
+            // Both Arabic and Kurdish are RTL languages
+            final textDirection = (locale.languageCode == 'ar' || locale.languageCode == 'ku')
                 ? TextDirection.rtl 
                 : TextDirection.ltr;
             

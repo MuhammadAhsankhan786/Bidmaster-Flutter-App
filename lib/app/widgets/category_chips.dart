@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/colors.dart';
+import '../utils/rtl_helper.dart';
+import '../services/app_localizations.dart';
 
 class CategoryChips extends StatelessWidget {
   final List<String> categories;
@@ -19,7 +21,7 @@ class CategoryChips extends StatelessWidget {
     
     if (categoryList.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No categories available')),
+        SnackBar(content: Text(AppLocalizations.of(context)?.noCategoriesAvailable ?? 'No categories available')),
       );
       return;
     }
@@ -60,7 +62,7 @@ class CategoryChips extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Select Category',
+                    AppLocalizations.of(context)?.selectCategory ?? 'Select Category',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -92,7 +94,9 @@ class CategoryChips extends StatelessWidget {
                   
                   return ListTile(
                     title: Text(
-                      isAllCategory ? 'All Products' : category,
+                      isAllCategory 
+                          ? (AppLocalizations.of(context)?.allProducts ?? 'All Products')
+                          : (AppLocalizations.of(context)?.translateCategory(category) ?? category),
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
@@ -151,7 +155,7 @@ class CategoryChips extends StatelessWidget {
                 }
               },
               child: Container(
-                margin: const EdgeInsets.only(right: 8),
+                margin: RTLHelper.only(context, right: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
                   color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
@@ -167,7 +171,9 @@ class CategoryChips extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      isAllCategory ? 'All Products' : category,
+                      isAllCategory 
+                          ? (AppLocalizations.of(context)?.allProducts ?? 'All Products')
+                          : (AppLocalizations.of(context)?.translateCategory(category) ?? category),
                       style: TextStyle(
                         fontSize: 13,
                         color: colorScheme.primary,

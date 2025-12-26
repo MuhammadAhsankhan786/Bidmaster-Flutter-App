@@ -127,9 +127,18 @@ class AppRouter {
         }
       }
 
-      // Company Products routes - My Bids, Wishlist, Wins
-      if (location == '/buyer/bidding-history' || location == '/buyer-bidding-history' ||
-          location == '/wishlist' || location == '/wins') {
+      // My Bids - accessible to both company_products and seller_products (sellers can bid on other products too)
+      if (location == '/buyer/bidding-history' || location == '/buyer-bidding-history') {
+        // Allow both company_products and seller_products to see their bids
+        if (role != 'company_products' && role != 'seller_products') {
+          return '/role-selection';
+        }
+        // Both roles can access - no redirect needed
+        return null;
+      }
+
+      // Wishlist and Wins - only for company_products
+      if (location == '/wishlist' || location == '/wins') {
         if (role != 'company_products') {
           return role == 'seller_products' ? '/seller-dashboard' : '/role-selection';
         }

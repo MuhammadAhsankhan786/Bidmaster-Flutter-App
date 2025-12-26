@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../utils/image_url_helper.dart';
+import '../utils/rtl_helper.dart';
+import '../services/app_localizations.dart';
 import '../theme/colors.dart';
 
 class ProductCard extends StatefulWidget {
@@ -111,9 +113,10 @@ class _ProductCardState extends State<ProductCard> with SingleTickerProviderStat
     }
   }
 
-  String _formatTimer() {
+  String _formatTimer(BuildContext context) {
     if (_remaining.isNegative || _remaining.inSeconds <= 0) {
-      return '0 Sec';
+      final l10n = AppLocalizations.of(context);
+      return '0 ${l10n?.second ?? 'Sec'}';
     }
 
     final days = _remaining.inDays;
@@ -122,14 +125,15 @@ class _ProductCardState extends State<ProductCard> with SingleTickerProviderStat
     final seconds = _remaining.inSeconds % 60;
 
     // Compact format to prevent overflow
+    final l10n = AppLocalizations.of(context);
     if (days > 0) {
-      return '$days ${days == 1 ? 'Day' : 'Days'}';
+      return '$days ${days == 1 ? (l10n?.day ?? 'Day') : (l10n?.days ?? 'Days')}';
     } else if (hours > 0) {
-      return '$hours ${hours == 1 ? 'Hr' : 'Hrs'}';
+      return '$hours ${hours == 1 ? (l10n?.hour ?? 'Hr') : (l10n?.hours ?? 'Hrs')}';
     } else if (minutes > 0) {
-      return '$minutes ${minutes == 1 ? 'Min' : 'Mins'}';
+      return '$minutes ${minutes == 1 ? (l10n?.minute ?? 'Min') : (l10n?.minutes ?? 'Mins')}';
     } else {
-      return '$seconds ${seconds == 1 ? 'Sec' : 'Secs'}';
+      return '$seconds ${seconds == 1 ? (l10n?.second ?? 'Sec') : (l10n?.seconds ?? 'Secs')}';
     }
   }
 
@@ -252,7 +256,7 @@ class _ProductCardState extends State<ProductCard> with SingleTickerProviderStat
               
               // Title - Below image
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                padding: RTLHelper.fromLTRB(context, 12, 8, 12, 4),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -281,7 +285,7 @@ class _ProductCardState extends State<ProductCard> with SingleTickerProviderStat
                           const SizedBox(width: 3),
                           Expanded(
                             child: Text(
-                              widget.category!,
+                              AppLocalizations.of(context)?.translateCategory(widget.category!) ?? widget.category!,
                               style: TextStyle(
                                 fontSize: 9,
                                 color: _textLight(context),
@@ -300,27 +304,48 @@ class _ProductCardState extends State<ProductCard> with SingleTickerProviderStat
 
               // Timer and Price Badges - Below title
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                padding: RTLHelper.fromLTRB(context, 12, 0, 12, 8),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     // Timer Badge - Green style
-                    Container(
-                      padding: const EdgeInsets.only(left: 10, right: 10, top: 6, bottom: 6),
-                      decoration: BoxDecoration(
-                        color: _timerBg, // Green color
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        _formatDigitalTimer(),
-                        style: const TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                          color: _timerText,
-                          letterSpacing: 0.2,
+                    // FIX: Only show timer if endTime is valid and in the future
+                    // Pending products (without endTime) should not show timer
+                    if (widget.endTime.isAfter(DateTime.now()))
+                      Container(
+                        padding: RTLHelper.only(context, left: 10, right: 10, top: 6, bottom: 6),
+                        decoration: BoxDecoration(
+                          color: _timerBg, // Green color
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          _formatDigitalTimer(),
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: _timerText,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      )
+                    else
+                      // Show "Pending" badge if auction hasn't started yet
+                      Container(
+                        padding: RTLHelper.only(context, left: 10, right: 10, top: 6, bottom: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.slate400,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          AppLocalizations.of(context)?.pending ?? 'Pending',
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimaryLight,
+                            letterSpacing: 0.2,
+                          ),
                         ),
                       ),
-                    ),
                     // Price Badge - Grey style
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -339,8 +364,8 @@ class _ProductCardState extends State<ProductCard> with SingleTickerProviderStat
                       ),
                     ),
                   ],
+                ),
               ),
-            ),
             ],
           ),
         ),

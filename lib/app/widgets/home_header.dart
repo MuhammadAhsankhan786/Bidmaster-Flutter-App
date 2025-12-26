@@ -3,7 +3,9 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:go_router/go_router.dart';
 import '../services/storage_service.dart';
 import '../services/api_service.dart';
+import '../services/app_localizations.dart';
 import '../theme/colors.dart';
+import '../utils/rtl_helper.dart';
 
 class HomeHeader extends StatefulWidget {
   final TextEditingController? searchController;
@@ -62,10 +64,10 @@ class _HomeHeaderState extends State<HomeHeader> {
       if (token == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please login first'),
+            SnackBar(
+              content: Text(AppLocalizations.of(context)?.pleaseLoginFirst ?? 'Please login first'),
               backgroundColor: Colors.orange,
-              duration: Duration(seconds: 3),
+              duration: const Duration(seconds: 3),
             ),
           );
           Future.delayed(const Duration(milliseconds: 500), () {
@@ -96,7 +98,7 @@ class _HomeHeaderState extends State<HomeHeader> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Role switched to ${newRole == 'seller_products' ? 'Seller Products' : 'Company Products'}'),
+            content: Text('${AppLocalizations.of(context)?.roleSwitched ?? 'Role switched to'} ${newRole == 'seller_products' ? (AppLocalizations.of(context)?.sellerProducts ?? 'Seller Products') : (AppLocalizations.of(context)?.companyProducts ?? 'Company Products')}'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),
@@ -126,10 +128,10 @@ class _HomeHeaderState extends State<HomeHeader> {
             errorMessage.contains('session expired') ||
             errorMessage.contains('no access token')) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please login first'),
+            SnackBar(
+              content: Text(AppLocalizations.of(context)?.pleaseLoginFirst ?? 'Please login first'),
               backgroundColor: Colors.orange,
-              duration: Duration(seconds: 3),
+              duration: const Duration(seconds: 3),
             ),
           );
           Future.delayed(const Duration(milliseconds: 500), () {
@@ -140,7 +142,7 @@ class _HomeHeaderState extends State<HomeHeader> {
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to switch role: ${e.toString()}'),
+              content: Text('${AppLocalizations.of(context)?.failedToSwitchRole ?? 'Failed to switch role'}: ${e.toString()}'),
               backgroundColor: Colors.red,
               duration: const Duration(seconds: 3),
             ),
@@ -177,8 +179,9 @@ class _HomeHeaderState extends State<HomeHeader> {
               if (widget.showBackButton)
                 IconButton(
                   onPressed: () {
-                    if (Navigator.of(context).canPop()) {
-                      Navigator.of(context).pop();
+                    // Use context.pop() for go_router navigation
+                    if (context.canPop()) {
+                      context.pop();
                     } else {
                       context.go('/home');
                     }
@@ -193,9 +196,14 @@ class _HomeHeaderState extends State<HomeHeader> {
                 )
               else
                 Builder(
-                  builder: (context) => IconButton(
+                  builder: (context) =>                   IconButton(
                     onPressed: () {
-                      Scaffold.of(context).openDrawer();
+                      // Open drawer from correct side based on RTL
+                      if (RTLHelper.isRTL(context)) {
+                        Scaffold.of(context).openEndDrawer();
+                      } else {
+                        Scaffold.of(context).openDrawer();
+                      }
                     },
                     icon: Icon(
                       Icons.menu,
@@ -217,32 +225,35 @@ class _HomeHeaderState extends State<HomeHeader> {
                 child: Row(
                   children: [
                     // Logo image - Clean and professional
-                    Image.asset(
-                      'assets/images/bid-logo.jpeg',
-                      width: 45,
-                      height: 45,
-                      fit: BoxFit.cover,
-                      filterQuality: FilterQuality.high,
-                      errorBuilder: (context, error, stackTrace) {
-                        // Fallback to icon if image not found
-                        if (kDebugMode) {
-                          print('❌ Logo not found: assets/images/bid-logo.jpeg');
-                          print('   Error: $error');
-                        }
-                        return Container(
-                          width: 45,
-                          height: 45,
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            Icons.gavel,
-                            color: colorScheme.onPrimary,
-                            size: 26,
-                          ),
-                        );
-                      },
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.asset(
+                        'assets/images/bid-logo.jpeg',
+                        width: 45,
+                        height: 45,
+                        fit: BoxFit.cover,
+                        filterQuality: FilterQuality.high,
+                        errorBuilder: (context, error, stackTrace) {
+                          // Fallback to icon if image not found
+                          if (kDebugMode) {
+                            print('❌ Logo not found: assets/images/bid-logo.jpeg');
+                            print('   Error: $error');
+                          }
+                          return Container(
+                            width: 45,
+                            height: 45,
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.gavel,
+                              color: colorScheme.onPrimary,
+                              size: 26,
+                            ),
+                          );
+                        },
+                      ),
                     ),
                     const SizedBox(width: 10),
                     ShaderMask(
@@ -260,7 +271,7 @@ class _HomeHeaderState extends State<HomeHeader> {
                         textBaseline: TextBaseline.alphabetic,
                         children: [
                           Text(
-                            'IRAQI',
+                            AppLocalizations.of(context)?.iraqiBid ?? 'IRAQI BID',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w900,
@@ -275,23 +286,7 @@ class _HomeHeaderState extends State<HomeHeader> {
                               ],
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'BID',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                              letterSpacing: 2.0,
-                              shadows: [
-                                Shadow(
-                                  color: colorScheme.primary.withOpacity(0.3),
-                                  offset: const Offset(0, 1),
-                                  blurRadius: 2,
-                                ),
-                              ],
-                            ),
-                          ),
+                          // Logo text is now combined in iraqiBid key
                         ],
                       ),
                     ),
@@ -399,7 +394,7 @@ class _RoleButtons extends StatelessWidget {
         // Company Product Button
         Expanded(
           child: _RoleButton(
-            label: 'Company Product',
+            label: AppLocalizations.of(context)?.companyProducts ?? 'Company Product',
             isActive: isCompanyActive,
             isLoading: isSwitching && !isCompanyActive,
             onTap: () => onRoleSelected('company_products'),
@@ -409,7 +404,7 @@ class _RoleButtons extends StatelessWidget {
         // Seller Product Button
         Expanded(
           child: _RoleButton(
-            label: 'Seller Product',
+            label: AppLocalizations.of(context)?.sellerProducts ?? 'Seller Product',
             isActive: isSellerActive,
             isLoading: isSwitching && !isSellerActive,
             onTap: () => onRoleSelected('seller_products'),
@@ -507,10 +502,14 @@ class _SearchBoxState extends State<_SearchBox> with SingleTickerProviderStateMi
   late Animation<double> _fadeAnimation;
   int _currentHintIndex = 0;
   
-  final List<String> _hints = [
-    'Search here product',
-    'Search out category',
-  ];
+  List<String> _getHints(BuildContext context) {
+    return [
+      AppLocalizations.of(context)?.searchHereProduct ?? 'Search here product',
+      AppLocalizations.of(context)?.searchOutCategory ?? 'Search out category',
+    ];
+  }
+  
+  List<String> get _hints => _getHints(context);
 
   @override
   void initState() {
@@ -549,7 +548,7 @@ class _SearchBoxState extends State<_SearchBox> with SingleTickerProviderStateMi
         _animationController.reverse().then((_) {
           if (mounted) {
             setState(() {
-              _currentHintIndex = (_currentHintIndex + 1) % _hints.length;
+              _currentHintIndex = (_currentHintIndex + 1) % _getHints(context).length;
             });
             // Fade in
             _animationController.forward();
@@ -659,12 +658,12 @@ class _SearchBoxState extends State<_SearchBox> with SingleTickerProviderStateMi
           if (!hasText)
             Positioned.fill(
               child: Padding(
-                padding: const EdgeInsets.only(left: 40, right: 40), // Account for prefix and suffix icons
+                padding: RTLHelper.only(context, left: 40, right: 40), // Account for prefix and suffix icons
                 child: Center(
                   child: FadeTransition(
                     opacity: _fadeAnimation,
                     child: Text(
-                      _hints[_currentHintIndex],
+                      _getHints(context)[_currentHintIndex],
                       style: TextStyle(
                         color: colorScheme.onSurface.withOpacity(0.6),
                         fontSize: 14,

@@ -63,8 +63,20 @@ class _AppDrawerState extends State<AppDrawer> {
 
 
   void _selectLanguage(String language) {
-    LanguageService.setLanguage(language);
-    // Language will update automatically via listener
+    if (_selectedLanguage != language) {
+      LanguageService.setLanguage(language);
+      // Update selected language immediately
+      setState(() {
+        _selectedLanguage = language;
+      });
+      // Language will update automatically via listener
+      // Close drawer after language change
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+      });
+    }
   }
 
   void _shareApp() {
@@ -91,7 +103,7 @@ class _AppDrawerState extends State<AppDrawer> {
                 margin: const EdgeInsets.all(16),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: _orangeBg,
+                color: _orangeBg,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -146,11 +158,11 @@ class _AppDrawerState extends State<AppDrawer> {
                         context: context,
                         builder: (context) => AlertDialog(
                           title: Text(l10n?.contactUs ?? 'Contact Us'),
-                          content: const Text('Email: info@iqbidmaster.com\nPhone: +964 750 352 3322'),
+                          content: Text(l10n?.contactUsContent ?? 'Email: info@iqbidmaster.com\nPhone: +964 750 352 3322'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context),
-                              child: const Text('Close'),
+                              child: Text(l10n?.close ?? 'Close'),
                             ),
                           ],
                         ),
@@ -168,16 +180,14 @@ class _AppDrawerState extends State<AppDrawer> {
                       showDialog(
                         context: context,
                         builder: (context) => AlertDialog(
-                          title: Text('${l10n?.aboutUs ?? 'About'} IQ BidMaster'),
+                          title: Text(l10n?.aboutUsTitle ?? 'About IQ BidMaster'),
                           content: Text(
-                            'IQ BidMaster is the first online auction platform in Iraq and Kurdistan. '
-                            'It is a very developed online store where customers can buy high quality items '
-                            'with real guarantee at the best prices.',
+                            l10n?.aboutUsContent ?? 'IQ BidMaster is the first online auction platform in Iraq and Kurdistan. It is a very developed online store where customers can buy high quality items with real guarantee at the best prices.',
                           ),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context),
-                              child: const Text('Close'),
+                              child: Text(l10n?.close ?? 'Close'),
                             ),
                           ],
                         ),
@@ -367,4 +377,3 @@ class _LanguageButton extends StatelessWidget {
     );
   }
 }
-

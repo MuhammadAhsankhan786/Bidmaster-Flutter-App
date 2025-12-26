@@ -208,6 +208,10 @@ class StorageService {
     await prefs.remove(_keyUserPhone);
     await prefs.remove(_keyUserName);
     await prefs.remove(_keyUserEmail);
+    await prefs.remove(_keyReferralCode);
+    await prefs.remove(_keyRewardBalance);
+    // Clear wishlist when user logs out
+    await clearWishlist();
   }
 
   // Check if user is logged in
@@ -216,26 +220,35 @@ class StorageService {
     return token != null && token.isNotEmpty;
   }
 
-  // Wishlist management
+  // Wishlist management - User-specific wishlist
+  static Future<String> _getWishlistKey() async {
+    final userId = await getUserId();
+    // Use user-specific key to prevent wishlist sharing between users
+    return userId != null ? '${_keyWishlist}_$userId' : _keyWishlist;
+  }
+
   static Future<void> addToWishlist(int productId) async {
     final prefs = await _prefs;
+    final wishlistKey = await _getWishlistKey();
     final wishlist = await getWishlist();
     if (!wishlist.contains(productId)) {
       wishlist.add(productId);
-      await prefs.setStringList(_keyWishlist, wishlist.map((id) => id.toString()).toList());
+      await prefs.setStringList(wishlistKey, wishlist.map((id) => id.toString()).toList());
     }
   }
 
   static Future<void> removeFromWishlist(int productId) async {
     final prefs = await _prefs;
+    final wishlistKey = await _getWishlistKey();
     final wishlist = await getWishlist();
     wishlist.remove(productId);
-    await prefs.setStringList(_keyWishlist, wishlist.map((id) => id.toString()).toList());
+    await prefs.setStringList(wishlistKey, wishlist.map((id) => id.toString()).toList());
   }
 
   static Future<List<int>> getWishlist() async {
     final prefs = await _prefs;
-    final wishlistStrings = prefs.getStringList(_keyWishlist) ?? [];
+    final wishlistKey = await _getWishlistKey();
+    final wishlistStrings = prefs.getStringList(wishlistKey) ?? [];
     return wishlistStrings.map((id) => int.tryParse(id) ?? 0).where((id) => id > 0).toList();
   }
 
@@ -246,6 +259,10 @@ class StorageService {
 
   static Future<void> clearWishlist() async {
     final prefs = await _prefs;
+    // Clear current user's wishlist
+    final wishlistKey = await _getWishlistKey();
+    await prefs.remove(wishlistKey);
+    // Also clear legacy wishlist key for backward compatibility
     await prefs.remove(_keyWishlist);
   }
 }

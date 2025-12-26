@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:go_router/go_router.dart';
 import '../widgets/home_header.dart';
 import '../widgets/banner_carousel.dart';
@@ -12,6 +13,7 @@ import '../models/product_model.dart';
 import '../services/app_localizations.dart';
 import '../services/storage_service.dart';
 import '../theme/colors.dart';
+import '../utils/rtl_helper.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -154,31 +156,46 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           List<ProductModel> filteredProducts = newProducts;
           
-          // Apply strict client-side search filter - ONLY show products that match search query
+          // Apply strict client-side search filter - ONLY show products where TITLE matches search query
           if (searchQuery.isNotEmpty) {
             final searchLower = searchQuery.toLowerCase().trim();
             filteredProducts = filteredProducts.where((product) {
-              // Search in title (case-insensitive)
+              // Search ONLY in title (case-insensitive) - most relevant for user
               final titleMatch = product.title.toLowerCase().contains(searchLower);
-              // Search in description (case-insensitive)
-              final descMatch = product.description?.toLowerCase().contains(searchLower) ?? false;
-              // Search in category name (case-insensitive)
-              final categoryMatch = product.categoryName?.toLowerCase().contains(searchLower) ?? false;
               
-              // Only return products that match at least one field
-              return titleMatch || descMatch || categoryMatch;
+              // Only return products where title matches
+              return titleMatch;
             }).toList();
           }
           
-          // Filter: When viewing as company_products, exclude products created by current user (if they're also a seller)
-          // This ensures same product doesn't appear in both lists
-          filteredProducts = filteredProducts.where((product) {
-            // If user has seller products, exclude their own products from company view
-            if (currentUserId != null && product.sellerId == currentUserId) {
-              return false; // Don't show seller's own products in company products view
+          // Filter: When viewing as company_products, exclude ALL seller products
+          // Company products should only show products without sellerId (company products)
+          if (userRole == 'company_products') {
+            final beforeCount = filteredProducts.length;
+            filteredProducts = filteredProducts.where((product) {
+              // Only show products that don't have a sellerId (company products)
+              // Strict check: sellerId must be null or undefined (not 0, not any number)
+              final isCompanyProduct = product.sellerId == null;
+              if (!isCompanyProduct) {
+                // Debug: Log products being filtered out
+                if (kDebugMode) {
+                  print('🚫 [Company Products Filter] Filtering out seller product: ${product.id} - ${product.title} (sellerId: ${product.sellerId})');
+                }
+              }
+              return isCompanyProduct;
+            }).toList();
+            if (kDebugMode) {
+              print('📊 [Company Products Filter] Filtered ${beforeCount} products to ${filteredProducts.length} (removed ${beforeCount - filteredProducts.length} seller products)');
             }
-            return true;
-          }).toList();
+          } else {
+            // For other roles, exclude only current user's own seller products
+            filteredProducts = filteredProducts.where((product) {
+              if (currentUserId != null && product.sellerId != null && product.sellerId == currentUserId) {
+                return false; // Don't show seller's own products
+              }
+              return true;
+            }).toList();
+          }
           
           if (reset || searchQuery.isNotEmpty) {
             // When resetting or when search is active, replace all products
@@ -205,28 +222,49 @@ class _HomeScreenState extends State<HomeScreen> {
     final now = DateTime.now();
     final searchQuery = _searchController.text.trim().toLowerCase();
     
-    // First filter by search query if active
+    // First filter by search query if active - ONLY match in title
     var filtered = _products;
     if (searchQuery.isNotEmpty) {
       filtered = filtered.where((product) {
-        // Search in title (case-insensitive)
+        // Search ONLY in title (case-insensitive) - most relevant for user
         final titleMatch = product.title.toLowerCase().contains(searchQuery);
-        // Search in description (case-insensitive)
-        final descMatch = product.description?.toLowerCase().contains(searchQuery) ?? false;
-        // Search in category name (case-insensitive)
-        final categoryMatch = product.categoryName?.toLowerCase().contains(searchQuery) ?? false;
         
-        // Only return products that match at least one field
-        return titleMatch || descMatch || categoryMatch;
+        // Only return products where title matches
+        return titleMatch;
       }).toList();
     }
     
+    // Filter by role: When viewing Company Product, exclude ALL seller products
+    if (_currentUserRole == 'company_products') {
+      final beforeCount = filtered.length;
+      filtered = filtered.where((product) {
+        // Only show company products (no sellerId)
+        // Strict check: sellerId must be null or undefined
+        final isCompanyProduct = product.sellerId == null;
+        if (!isCompanyProduct && kDebugMode) {
+          print('🚫 [Company Products Display Filter] Filtering out seller product: ${product.id} - ${product.title} (sellerId: ${product.sellerId})');
+        }
+        return isCompanyProduct;
+      }).toList();
+      if (kDebugMode && beforeCount != filtered.length) {
+        print('📊 [Company Products Display Filter] Filtered ${beforeCount} products to ${filtered.length} (removed ${beforeCount - filtered.length} seller products)');
+      }
+    }
+    
+    // CRITICAL FIX: Filter out pending products - only show approved products
     // Then filter out products where bidding has ended (auctionEndTime < now)
     return filtered.where((product) {
-      if (product.auctionEndTime == null) {
-        // If no end time, keep the product (might be pending)
-        return true;
+      // FIX: Only show approved products (pending products should not appear)
+      if (product.status != 'approved') {
+        return false; // Hide pending/rejected products
       }
+      
+      // FIX: If no end time, hide the product (should not happen for approved products)
+      // But if it does, hide it to prevent timer issues
+      if (product.auctionEndTime == null) {
+        return false; // Hide products without auction end time
+      }
+      
       // Only show products where auction hasn't ended yet
       return product.auctionEndTime!.isAfter(now);
     }).toList();
@@ -355,19 +393,22 @@ class _HomeScreenState extends State<HomeScreen> {
         // Show confirmation dialog before exiting
         final shouldExit = await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Exit App'),
-            content: const Text('Do you want to exit the app?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Exit'),
-              ),
-            ],
+          builder: (context) => Directionality(
+            textDirection: RTLHelper.getTextDirection(context),
+            child: AlertDialog(
+              title: Text(AppLocalizations.of(context)?.exitApp ?? 'Exit App'),
+              content: Text(AppLocalizations.of(context)?.exitAppMessage ?? 'Do you want to exit the app?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: Text(AppLocalizations.of(context)?.cancel ?? 'Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: Text(AppLocalizations.of(context)?.exit ?? 'Exit'),
+                ),
+              ],
+            ),
           ),
         );
         
@@ -376,9 +417,14 @@ class _HomeScreenState extends State<HomeScreen> {
           SystemNavigator.pop();
         }
       },
-      child: Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      drawer: const AppDrawer(),
+      child: Directionality(
+        textDirection: RTLHelper.getTextDirection(context),
+        child: Scaffold(
+          backgroundColor: theme.scaffoldBackgroundColor,
+          // For RTL languages, drawer should open from right side
+          drawer: RTLHelper.isRTL(context) ? null : const AppDrawer(),
+          endDrawer: RTLHelper.isRTL(context) ? const AppDrawer() : null,
+          drawerEdgeDragWidth: MediaQuery.of(context).size.width, // Allow drawer from both sides
       // Floating button removed - now in AppBar for sellers
       body: SafeArea(
         child: Column(
@@ -387,10 +433,16 @@ class _HomeScreenState extends State<HomeScreen> {
             HomeHeader(
               searchController: _searchController,
               onSearchSubmitted: () => _loadProducts(reset: true),
-              onRoleChanged: () {
-                // Refresh products and role when role changes
-                _loadUserRole();
-                _loadProducts(reset: true);
+              onRoleChanged: () async {
+                // Refresh role first, then reload products with new role
+                await _loadUserRole();
+                // Clear current products to force reload
+                setState(() {
+                  _products = [];
+                  _currentPage = 1;
+                  _hasMore = true;
+                });
+                await _loadProducts(reset: true);
               },
             ),
 
@@ -439,7 +491,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Icon(Icons.error_outline, size: 48, color: _timer),
                                     const SizedBox(height: 16),
                                     Text(
-                                      'Failed to load products',
+                                      AppLocalizations.of(context)?.failedToLoadProducts ?? 'Failed to load products',
                                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                             color: colorScheme.onSurface,
                                           ),
@@ -481,7 +533,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     const SizedBox(height: 16),
                                     Text(
                                       _currentUserRole == 'seller_products'
-                                          ? 'No products yet'
+                                          ? (AppLocalizations.of(context)?.noProductsYet ?? 'No products yet')
                                           : (AppLocalizations.of(context)?.noProductsFound ?? 'No products found'),
                                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                             color: colorScheme.onSurface,
@@ -490,7 +542,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     const SizedBox(height: 8),
                                     Text(
                                       _currentUserRole == 'seller_products'
-                                          ? 'Create your first product to start selling'
+                                          ? (AppLocalizations.of(context)?.createFirstProduct ?? 'Create your first product to start selling')
                                           : (AppLocalizations.of(context)?.tryAdjustingSearch ?? 'Try adjusting your search or filters'),
                                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                             color: colorScheme.onSurface.withOpacity(0.7),
@@ -504,7 +556,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           context.push('/product-create');
                                         },
                                         icon: const Icon(Icons.add_rounded),
-                                        label: const Text('Create Product'),
+                                        label: Text(AppLocalizations.of(context)?.createProduct ?? 'Create Product'),
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: colorScheme.primary,
                                           foregroundColor: colorScheme.onPrimary,
@@ -585,27 +637,30 @@ class _HomeScreenState extends State<HomeScreen> {
                                           imageUrl: imageUrl ?? '',
                                           currentBid: (product.currentBid ?? product.startingBid ?? product.startingPrice).toInt(),
                                           totalBids: product.totalBids ?? 0,
-                                          endTime: product.auctionEndTime ?? DateTime.now().add(const Duration(days: 7)),
+                                          // FIX: Only show timer if auctionEndTime exists (approved products only)
+                                          // Pending products will be filtered out above, so this should never be null
+                                          endTime: product.auctionEndTime ?? DateTime.now().add(const Duration(days: 1)),
                                           category: product.categoryName,
                                           onTap: () {
                                             context.go('/product-details/${product.id}');
                                           },
                                         ),
                                         // Badge to distinguish product source
-                                        if (_currentUserRole == 'company_products')
+                                        // Note: In company_products view, only company products should show
+                                        // So this badge should only show "Company" if it appears
+                                        // But since we filter out seller products, this badge is mainly for edge cases
+                                        if (_currentUserRole == 'company_products' && !isSellerProduct)
                                           Positioned(
                                             top: 8,
                                             right: 8,
                                             child: Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                                               decoration: BoxDecoration(
-                                                color: isSellerProduct 
-                                                    ? AppColors.warning.withOpacity(0.9)
-                                                    : AppColors.blue600.withOpacity(0.9),
+                                                color: AppColors.blue600.withOpacity(0.9),
                                                 borderRadius: BorderRadius.circular(4),
                                               ),
                                               child: Text(
-                                                isSellerProduct ? 'Seller' : 'Company',
+                                                AppLocalizations.of(context)?.company ?? 'Company',
                                                 style: const TextStyle(
                                                   fontSize: 8,
                                                   fontWeight: FontWeight.bold,
@@ -631,10 +686,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      // Bottom Navigation Bar - IQ BidMaster Mobile App Style
-      bottomNavigationBar: _BottomNavBar(
-        onCategoryTap: _showCategoryModal,
-      ),
+          // Bottom Navigation Bar - IQ BidMaster Mobile App Style
+          bottomNavigationBar: _BottomNavBar(
+            onCategoryTap: _showCategoryModal,
+          ),
+        ),
       ),
     );
   }
@@ -696,7 +752,7 @@ class _BottomNavBar extends StatelessWidget {
               ),
               _BottomNavItem(
                 icon: Icons.favorite_border,
-                label: 'Wishlist',
+                label: AppLocalizations.of(context)?.wishlist ?? 'Wishlist',
                 isActive: currentRoute == '/wishlist',
                 onTap: () {
                   context.push('/wishlist');
@@ -704,7 +760,7 @@ class _BottomNavBar extends StatelessWidget {
               ),
               _BottomNavItem(
                 icon: Icons.check_circle_outline,
-                label: 'Wins',
+                label: AppLocalizations.of(context)?.wins ?? 'Wins',
                 isActive: currentRoute == '/wins',
                 onTap: () {
                   context.push('/wins');
@@ -712,7 +768,7 @@ class _BottomNavBar extends StatelessWidget {
               ),
               _BottomNavItem(
                 icon: Icons.notifications_outlined,
-                label: 'Notification',
+                label: AppLocalizations.of(context)?.notification ?? 'Notification',
                 isActive: currentRoute == '/notifications',
                 onTap: () {
                   context.push('/notifications');
