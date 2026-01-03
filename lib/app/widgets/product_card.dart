@@ -329,7 +329,7 @@ class _ProductCardState extends State<ProductCard> with SingleTickerProviderStat
                         ),
                       )
                     else
-                      // Show "Pending" badge if auction hasn't started yet
+                      // Show "Ended" badge if auction has ended
                       Container(
                         padding: RTLHelper.only(context, left: 10, right: 10, top: 6, bottom: 6),
                         decoration: BoxDecoration(
@@ -337,7 +337,7 @@ class _ProductCardState extends State<ProductCard> with SingleTickerProviderStat
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          AppLocalizations.of(context)?.pending ?? 'Pending',
+                          AppLocalizations.of(context)?.ended ?? 'Ended',
                           style: const TextStyle(
                             fontSize: 9,
                             fontWeight: FontWeight.w600,

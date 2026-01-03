@@ -302,45 +302,9 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
 
                       const SizedBox(height: 16),
 
-                      // Stats Cards (Optional - Seller-specific)
-                      if (!_isLoading && _products.isNotEmpty) ...[
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: RepaintBoundary(
-                            child: ListView.separated(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: _stats.length,
-                              separatorBuilder: (context, index) => const SizedBox(height: 12),
-                              itemBuilder: (context, index) {
-                                final stat = _stats[index];
-                                return RepaintBoundary(
-                                  child: _StatCard(stat: stat),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
 
-                      // Status Filter Chips
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          children: [
-                            _buildStatusFilter('all', 'All'),
-                            const SizedBox(width: 8),
-                            _buildStatusFilter('pending', 'Pending'),
-                            const SizedBox(width: 8),
-                            _buildStatusFilter('approved', 'Active'),
-                            const SizedBox(width: 8),
-                            _buildStatusFilter('sold', 'Sold'),
-                          ],
-                        ),
-                      ),
 
-                      const SizedBox(height: 16),
+
 
                       // Products Grid - Same as Home Screen (2 columns)
                       Padding(

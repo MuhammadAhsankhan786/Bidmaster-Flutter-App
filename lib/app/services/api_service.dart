@@ -694,8 +694,10 @@ class ApiService {
     required String password,
   }) async {
     try {
-      print('✅ Connected to live DB - Logging in');
-      print('   Phone: $phone, Email: $email');
+      if (kDebugMode) {
+        print('✅ Connected to live DB - Logging in');
+        print('   Phone: $phone, Email: $email');
+      }
       
       final response = await _dio.post(
         '/auth/login',
@@ -706,9 +708,11 @@ class ApiService {
         },
       );
       
-      print('✅ JWT verified - Login successful');
-      print('   User ID: ${response.data['user']?['id']}');
-      print('   Role: ${response.data['user']?['role']}');
+      if (kDebugMode) {
+        print('✅ JWT verified - Login successful');
+        print('   User ID: ${response.data['user']?['id']}');
+        print('   Role: ${response.data['user']?['role']}');
+      }
       
       // Save tokens and user data
       final accessToken = response.data['accessToken'] ?? response.data['token'];
@@ -720,10 +724,14 @@ class ApiService {
             accessToken: accessToken as String,
             refreshToken: refreshToken as String,
           );
-          print('✅ Access and refresh tokens saved to storage');
+          if (kDebugMode) {
+            print('✅ Access and refresh tokens saved to storage');
+          }
         } else {
           await StorageService.saveAccessToken(accessToken as String);
-          print('✅ Access token saved to storage');
+          if (kDebugMode) {
+            print('✅ Access token saved to storage');
+          }
         }
       }
       if (response.data['user'] != null) {
@@ -735,12 +743,16 @@ class ApiService {
           name: user['name'] as String?,
           email: user['email'] as String?,
         );
-        print('✅ User data saved to storage');
+        if (kDebugMode) {
+          print('✅ User data saved to storage');
+        }
       }
       
       return response.data;
     } catch (e) {
-      print('❌ Login error: $e');
+      if (kDebugMode) {
+        print('❌ Login error: $e');
+      }
       throw _handleError(e);
     }
   }
@@ -749,22 +761,28 @@ class ApiService {
   /// ✅ Refresh access token using refresh token
   Future<Map<String, dynamic>> refreshToken(String refreshToken) async {
     try {
-      print('🔄 Refreshing access token...');
+      if (kDebugMode) {
+        print('🔄 Refreshing access token...');
+      }
       
       final response = await _dio.post(
         '/auth/refresh',
         data: {'refreshToken': refreshToken},
       );
       
-      if (response.data['success'] == true) {
-        print('✅ Token refreshed successfully');
-      } else {
-        print('⚠️ Token refresh returned success: false');
+      if (kDebugMode) {
+        if (response.data['success'] == true) {
+          print('✅ Token refreshed successfully');
+        } else {
+          print('⚠️ Token refresh returned success: false');
+        }
       }
       
       return response.data;
     } catch (e) {
-      print('❌ Refresh token error: $e');
+      if (kDebugMode) {
+        print('❌ Refresh token error: $e');
+      }
       throw _handleError(e);
     }
   }
@@ -773,16 +791,22 @@ class ApiService {
   /// ✅ LIVE: Live user info from database
   Future<UserModel> getProfile() async {
     try {
-      print('✅ Connected to live DB - Fetching user profile');
+      if (kDebugMode) {
+        print('✅ Connected to live DB - Fetching user profile');
+      }
       
       final response = await _dio.get('/auth/profile');
       
-      print('✅ JWT verified');
-      print('✅ Fetched 1 record (user profile)');
+      if (kDebugMode) {
+        print('✅ JWT verified');
+        print('✅ Fetched 1 record (user profile)');
+      }
       
       return UserModel.fromJson(response.data['data']);
     } catch (e) {
-      print('❌ Error fetching profile: $e');
+      if (kDebugMode) {
+        print('❌ Error fetching profile: $e');
+      }
       throw _handleError(e);
     }
   }
@@ -795,9 +819,11 @@ class ApiService {
       // Check if token exists before making request
       final accessToken = await StorageService.getAccessToken();
       if (kDebugMode) {
+      if (kDebugMode) {
         print('✅ Connected to live DB - Updating profile');
         print('   Name: $name, Phone: $phone, Role: $role');
         print('   Has Access Token: ${accessToken != null}');
+      }
         if (accessToken != null) {
           print('   Token preview: ${accessToken.substring(0, 30)}...');
         } else {
