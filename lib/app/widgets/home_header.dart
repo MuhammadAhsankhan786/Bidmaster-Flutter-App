@@ -11,6 +11,7 @@ class HomeHeader extends StatefulWidget {
   final TextEditingController? searchController;
   final VoidCallback? onSearchSubmitted;
   final VoidCallback? onRoleChanged;
+  final VoidCallback? onSellerStatsPressed;
   final bool showBackButton;
 
   const HomeHeader({
@@ -18,6 +19,7 @@ class HomeHeader extends StatefulWidget {
     this.searchController,
     this.onSearchSubmitted,
     this.onRoleChanged,
+    this.onSellerStatsPressed,
     this.showBackButton = false,
   });
 
@@ -224,72 +226,15 @@ class _HomeHeaderState extends State<HomeHeader> {
                 },
                 child: Row(
                   children: [
-                    // Logo image - Clean and professional
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.asset(
-                        'assets/images/bid-logo.jpeg',
-                        width: 45,
-                        height: 45,
-                        fit: BoxFit.cover,
-                        filterQuality: FilterQuality.high,
-                        errorBuilder: (context, error, stackTrace) {
-                          // Fallback to icon if image not found
-                          if (kDebugMode) {
-                            print('❌ Logo not found: assets/images/bid-logo.jpeg');
-                            print('   Error: $error');
-                          }
-                          return Container(
-                            width: 45,
-                            height: 45,
-                            decoration: BoxDecoration(
-                              color: colorScheme.primary,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              Icons.gavel,
-                              color: colorScheme.onPrimary,
-                              size: 26,
-                            ),
-                          );
-                        },
+                      Text(
+                        'IRAQ BID', // Hardcoded as per request
+                        style: TextStyle(
+                          fontSize: 20, // Slightly larger for emphasis since image is gone
+                          fontWeight: FontWeight.w900,
+                          color: isDark ? Colors.white : Colors.black, // White in dark mode, Black in light mode
+                          letterSpacing: 1.0,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    ShaderMask(
-                      shaderCallback: (bounds) => LinearGradient(
-                        colors: [
-                          colorScheme.primary,
-                          colorScheme.primary.withOpacity(0.8),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ).createShader(bounds),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Text(
-                            AppLocalizations.of(context)?.iraqiBid ?? 'IRAQI BID',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                              letterSpacing: 1.5,
-                              shadows: [
-                                Shadow(
-                                  color: colorScheme.primary.withOpacity(0.3),
-                                  offset: const Offset(0, 1),
-                                  blurRadius: 2,
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Logo text is now combined in iraqiBid key
-                        ],
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -298,6 +243,27 @@ class _HomeHeaderState extends State<HomeHeader> {
               
               // Add Product button (only for sellers)
               if (_currentRole == 'seller_products') ...[
+                // Stats/Management Icon
+                IconButton(
+                  onPressed: () {
+                    if (widget.onSellerStatsPressed != null) {
+                      widget.onSellerStatsPressed!();
+                    } else {
+                      // Fallback if callback not provided
+                      if (kDebugMode) print('Stats pressed but no callback provided');
+                    }
+                  },
+                  icon: Icon(
+                    Icons.analytics_outlined,
+                    color: colorScheme.onSurface,
+                    size: 24,
+                  ),
+                  tooltip: 'Dashboard Stats',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 8),
+
                 IconButton(
                   onPressed: () {
                     context.push('/product-create');
@@ -314,21 +280,7 @@ class _HomeHeaderState extends State<HomeHeader> {
                 const SizedBox(width: 8),
               ],
               
-              // Notifications icon
-              IconButton(
-                onPressed: () {
-                  context.push('/notifications');
-                },
-                icon: Icon(
-                  Icons.notifications_outlined,
-                  color: colorScheme.onSurface,
-                  size: 24,
-                ),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-              
-              const SizedBox(width: 8),
+
               
               // Profile icon
               IconButton(

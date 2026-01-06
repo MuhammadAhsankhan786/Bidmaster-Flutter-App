@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'dart:async';
 import '../utils/image_url_helper.dart';
 import '../utils/rtl_helper.dart';
@@ -13,6 +14,7 @@ class ProductCard extends StatefulWidget {
   final int totalBids;
   final DateTime endTime;
   final String? category;
+  final String? status; // 'pending', 'approved', 'rejected', 'ended'
   final VoidCallback onTap;
 
   const ProductCard({
@@ -24,6 +26,7 @@ class ProductCard extends StatefulWidget {
     required this.totalBids,
     required this.endTime,
     this.category,
+    this.status,
     required this.onTap,
   });
 
@@ -152,6 +155,9 @@ class _ProductCardState extends State<ProductCard> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+    // Check if product is pending - status is passed via constructor or inferred
+    final isPending = widget.status == 'pending';
+    
     return MouseRegion(
       onEnter: (_) {
         setState(() {
@@ -308,10 +314,32 @@ class _ProductCardState extends State<ProductCard> with SingleTickerProviderStat
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Timer Badge - Green style
-                    // FIX: Only show timer if endTime is valid and in the future
-                    // Pending products (without endTime) should not show timer
-                    if (widget.endTime.isAfter(DateTime.now()))
+                    // Timer Badge or Pending/Ended Status
+                    if (isPending)
+                      Container(
+                        padding: RTLHelper.only(context, left: 10, right: 10, top: 6, bottom: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.yellow100, // Yellow background for pending
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.yellow500.withOpacity(0.3), width: 0.5),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.hourglass_empty_rounded, size: 10, color: AppColors.yellow700),
+                            const SizedBox(width: 4),
+                            Text(
+                              AppLocalizations.of(context)?.pending ?? 'Pending',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.yellow700,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (widget.endTime.isAfter(DateTime.now()))
                       Container(
                         padding: RTLHelper.only(context, left: 10, right: 10, top: 6, bottom: 6),
                         decoration: BoxDecoration(
@@ -346,6 +374,7 @@ class _ProductCardState extends State<ProductCard> with SingleTickerProviderStat
                           ),
                         ),
                       ),
+                      
                     // Price Badge - Grey style
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -370,7 +399,7 @@ class _ProductCardState extends State<ProductCard> with SingleTickerProviderStat
           ),
         ),
       ),
-    );
+    ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0, duration: 400.ms, curve: Curves.easeOutQuad);
   }
 
   String _formatCurrency(int amount) {

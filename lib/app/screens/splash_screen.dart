@@ -168,10 +168,10 @@ class _SplashScreenState extends State<SplashScreen>
                   child: Column(
                     children: [
                       Text(
-                        'BidMaster',
+                        'IRAQ BID',
                         style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                              color: _textDark,
-                              fontWeight: FontWeight.bold,
+                              color: Colors.black, // Explicitly black as per previous preference
+                              fontWeight: FontWeight.w900, // Make it bolder to match header style
                             ),
                       ),
                       const SizedBox(height: 4),

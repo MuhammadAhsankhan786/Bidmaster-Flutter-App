@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
@@ -455,7 +456,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     // Banner Carousel (only for buyer/company role)
                     if (_currentUserRole != 'seller_products')
-                      const BannerCarousel(),
+                      const BannerCarousel().animate().fadeIn(duration: 600.ms).scale(begin: const Offset(0.95, 0.95), end: const Offset(1, 1), curve: Curves.easeOutBack),
 
                     // Category Filter Chips (only for buyer/company role)
                     if (_currentUserRole != 'seller_products')
@@ -464,7 +465,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         categories: _categories,
                         selectedCategory: _selectedCategory,
                         onCategorySelected: _onCategorySelected,
-                      ),
+                      ).animate().fadeIn(delay: 200.ms).slideX(begin: 0.1, end: 0, curve: Curves.easeOutQuad),
 
                     const SizedBox(height: 16),
 
@@ -671,7 +672,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           ),
                                       ],
                                     ),
-                                  );
+                                  ).animate().fadeIn( delay: (50 * index).ms ).slideY(begin: 0.1, end: 0, delay: (50 * index).ms).scale(begin: const Offset(0.9, 0.9), end: const Offset(1, 1), delay: (50 * index).ms);
                                 },
                               ),
                             ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/countdown_timer.dart';
@@ -1087,7 +1088,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
                           const SizedBox(height: 100), // Space for bottom button
                         ],
-                      ),
+                      ).animate().fadeIn(duration: 500.ms).slideY(begin: 0.1, end: 0, curve: Curves.easeOutQuad),
                     ),
                   ],
                 ),

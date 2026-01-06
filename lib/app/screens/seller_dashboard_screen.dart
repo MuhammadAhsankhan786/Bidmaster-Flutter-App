@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
@@ -234,6 +235,114 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
     );
   }
 
+  void _showStatsModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateModal) {
+            return Container(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Dashboard Overview',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_stats.isNotEmpty) _StatCard(stat: _stats.first),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Filter Listings',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildModalFilterChip('all', 'All', setStateModal),
+                        const SizedBox(width: 12),
+                        _buildModalFilterChip('pending', 'Pending', setStateModal),
+                        const SizedBox(width: 12),
+                        _buildModalFilterChip('approved', 'Active', setStateModal),
+                        const SizedBox(width: 12),
+                        _buildModalFilterChip('sold', 'Sold', setStateModal),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                ],
+              ),
+            );
+          }
+        );
+      },
+    );
+  }
+
+  Widget _buildModalFilterChip(String status, String label, StateSetter setStateModal) {
+    final isSelected = _selectedStatus == status;
+    return GestureDetector(
+      onTap: () {
+        // Update parent screen
+        setState(() {
+          _selectedStatus = status;
+        });
+        // Update modal UI
+        setStateModal(() {});
+        
+        // Close modal to show results immediately (User UX choice)
+        // Or keep open? User said "shift" them there. 
+        // Let's close it so they see the filtered list.
+        Navigator.pop(context);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.blue600 : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? AppColors.blue600 : AppColors.slate300,
+            width: 1.5,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            color: isSelected ? AppColors.cardWhite : AppColors.slate600,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -278,6 +387,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
               searchController: _searchController,
               onSearchSubmitted: () => _loadProducts(reset: true),
               showBackButton: true,
+              onSellerStatsPressed: _showStatsModal,
             ),
 
             // Content
@@ -290,7 +400,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Banner Carousel - Same as Home Screen
-                      const BannerCarousel(),
+                      const BannerCarousel().animate().fadeIn(duration: 600.ms).scale(begin: const Offset(0.95, 0.95), end: const Offset(1, 1), curve: Curves.easeOutBack),
 
                       // Category Filter Chips - Same as Home Screen (Always visible)
                       // Always show CategoryChips - it handles empty state internally
@@ -298,7 +408,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                         categories: _categories,
                         selectedCategory: _selectedCategory,
                         onCategorySelected: _onCategorySelected,
-                      ),
+                      ).animate().fadeIn(delay: 200.ms).slideX(begin: 0.1, end: 0, curve: Curves.easeOutQuad),
 
                       const SizedBox(height: 16),
 
@@ -412,6 +522,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                                           totalBids: product.totalBids ?? 0,
                                           endTime: product.auctionEndTime ?? DateTime.now().add(const Duration(days: 7)),
                                           category: product.categoryName,
+                                          status: product.status, // Pass status to card
                                           onTap: product.status == 'approved'
                                               ? () {
                                                   context.go('/product-details/${product.id}');
@@ -419,7 +530,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                                               : () {}, // Empty function for non-approved products
                                         ),
                                         // Status Badge
-                                        if (product.status != 'approved')
+                                        if (product.status != 'ended')
                                           Positioned(
                                             top: 8,
                                             right: 8,
@@ -428,16 +539,24 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                                               decoration: BoxDecoration(
                                                 color: product.status == 'pending'
                                                     ? AppColors.yellow100
-                                                    : AppColors.red100,
+                                                    : product.status == 'approved'
+                                                        ? AppColors.green100
+                                                        : AppColors.red100,
                                                 borderRadius: BorderRadius.circular(12),
                                               ),
                                               child: Text(
-                                                product.status == 'pending' ? 'Pending' : product.status.toUpperCase(),
+                                                product.status == 'pending' 
+                                                    ? 'Pending' 
+                                                    : product.status == 'approved'
+                                                        ? 'Active'
+                                                        : product.status!.toUpperCase(),
                                                 style: TextStyle(
                                                   fontSize: 10,
                                                   color: product.status == 'pending'
                                                       ? AppColors.yellow700
-                                                      : AppColors.red700,
+                                                      : product.status == 'approved'
+                                                          ? AppColors.green700
+                                                          : AppColors.red700,
                                                   fontWeight: FontWeight.w600,
                                                 ),
                                               ),
@@ -561,7 +680,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
                                         ),
                                       ],
                                     ),
-                                  );
+                                  ).animate().fadeIn( delay: (50 * index).ms ).slideY(begin: 0.1, end: 0, delay: (50 * index).ms).scale(begin: const Offset(0.9, 0.9), end: const Offset(1, 1), delay: (50 * index).ms);
                                 },
                               ),
                           ],

@@ -18,7 +18,7 @@ class AppLocalizations {
   static const LocalizationsDelegate<AppLocalizations> delegate = _AppLocalizationsDelegate();
 
   // Common translations
-  String get appName => _localizedValues[locale.languageCode]?['appName'] ?? 'IQ BidMaster';
+  String get appName => _localizedValues[locale.languageCode]?['appName'] ?? 'IRAQ BID';
   String get home => _localizedValues[locale.languageCode]?['home'] ?? 'Home';
   String get transactions => _localizedValues[locale.languageCode]?['transactions'] ?? 'Transactions';
   String get contactUs => _localizedValues[locale.languageCode]?['contactUs'] ?? 'Contact Us';
@@ -30,7 +30,7 @@ class AppLocalizations {
   String get loginRequired => _localizedValues[locale.languageCode]?['loginRequired'] ?? 'You need to be logged in to access the full features of this app';
   
   // Auth screen
-  String get welcome => _localizedValues[locale.languageCode]?['welcome'] ?? 'Welcome to IQ BidMaster';
+  String get welcome => _localizedValues[locale.languageCode]?['welcome'] ?? 'Welcome to IRAQ BID';
   String get enterPhone => _localizedValues[locale.languageCode]?['enterPhone'] ?? 'Enter your phone number to get started';
   String get phoneNumber => _localizedValues[locale.languageCode]?['phoneNumber'] ?? 'Phone Number';
   String get referralCode => _localizedValues[locale.languageCode]?['referralCode'] ?? 'Referral Code (Optional)';
@@ -220,7 +220,7 @@ class AppLocalizations {
 
   static final Map<String, Map<String, String>> _localizedValues = {
     'en': {
-      'appName': 'IQ BidMaster',
+      'appName': 'IRAQ BID',
       'home': 'Home',
       'transactions': 'Transactions',
       'contactUs': 'Contact Us',
@@ -230,7 +230,7 @@ class AppLocalizations {
       'language': 'Language',
       'notLoggedIn': 'Not Logged In',
       'loginRequired': 'You need to be logged in to access the full features of this app',
-      'welcome': 'Welcome to IQ BidMaster',
+      'welcome': 'Welcome to IRAQ BID',
       'enterPhone': 'Enter your phone number to get started',
       'phoneNumber': 'Phone Number',
       'referralCode': 'Referral Code (Optional)',

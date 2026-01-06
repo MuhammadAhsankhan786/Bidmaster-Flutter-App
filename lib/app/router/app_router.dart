@@ -1,4 +1,5 @@
 import 'package:go_router/go_router.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../screens/splash_screen.dart';
 import '../screens/auth_screen.dart';
@@ -185,9 +186,20 @@ class AppRouter {
       GoRoute(
         path: '/product-details/:id',
         name: 'product-details',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final id = state.pathParameters['id'] ?? '1';
-          return ProductDetailsScreen(productId: id);
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: ProductDetailsScreen(productId: id),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              const begin = Offset(1.0, 0.0);
+              const end = Offset.zero;
+              const curve = Curves.easeOutQuart;
+              var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+              var offsetAnimation = animation.drive(tween);
+              return SlideTransition(position: offsetAnimation, child: child);
+            },
+          );
         },
       ),
       GoRoute(

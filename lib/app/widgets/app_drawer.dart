@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../services/storage_service.dart';
 import '../services/theme_service.dart';
@@ -81,8 +82,8 @@ class _AppDrawerState extends State<AppDrawer> {
 
   void _shareApp() {
     Share.share(
-      'Check out IQ BidMaster - The best auction platform!',
-      subject: 'IQ BidMaster App',
+      'Check out IRAQ BID - The best auction platform!',
+      subject: 'IRAQ BID App',
     );
   }
 
@@ -257,7 +258,7 @@ class _AppDrawerState extends State<AppDrawer> {
                       ],
                     ),
                   ),
-                ],
+                ].animate(interval: 50.ms).fadeIn(duration: 400.ms).slideX(begin: -0.1, end: 0, curve: Curves.easeOutQuad),
               ),
             ),
 

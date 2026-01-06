@@ -155,17 +155,14 @@ class _MyAppState extends State<MyApp> {
             
             return Directionality(
               textDirection: textDirection,
-              child: AnimatedTheme(
-                data: themeMode == ThemeMode.dark 
-                    ? AppTheme.darkTheme 
-                    : AppTheme.lightTheme,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-                child: MaterialApp.router(
-                  title: 'IQ BidMaster',
-                  theme: AppTheme.lightTheme,
-                  darkTheme: AppTheme.darkTheme,
-                  themeMode: themeMode,
+              child: MaterialApp.router(
+                title: 'IRAQ BID',
+                theme: AppTheme.lightTheme,
+                darkTheme: AppTheme.darkTheme,
+                themeMode: themeMode,
+                // smooth transition is handled by MaterialApp's internal AnimatedTheme
+                themeAnimationDuration: const Duration(milliseconds: 300),
+                themeAnimationCurve: Curves.easeInOut,
                 locale: materialLocale, // Use English for Kurdish to avoid MaterialLocalizations errors
                 supportedLocales: const [
                   Locale('en', 'US'), // English
@@ -180,7 +177,6 @@ class _MyAppState extends State<MyApp> {
                   GlobalCupertinoLocalizations.delegate,
                 ],
                 routerConfig: AppRouter.router,
-                ),
               ),
             );
           },
