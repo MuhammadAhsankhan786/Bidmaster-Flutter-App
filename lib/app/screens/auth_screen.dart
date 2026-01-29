@@ -230,13 +230,25 @@ class _AuthScreenState extends State<AuthScreen> {
           return;
         }
         
-        // Handle specific Twilio Verify errors
+        // Extract error message from backend response first
+        if (e is DioException && e.response != null) {
+          final responseData = e.response?.data;
+          if (responseData is Map && responseData.containsKey('message')) {
+            final backendMessage = responseData['message'] as String;
+            // Use backend message directly if available
+            errorMsg = backendMessage;
+          }
+        }
+        
+        // Handle specific error patterns
         if (e.toString().contains('404') || e.toString().contains('not registered')) {
           errorMsg = 'Phone number not registered. Please contact administrator.';
-        } else if (e.toString().contains('Twilio') || e.toString().contains('SMS service')) {
-          errorMsg = 'SMS service temporarily unavailable. Please try again later.';
-        } else if (e.toString().contains('Invalid phone')) {
+        } else if (e.toString().contains('Invalid phone number format') || e.toString().contains('Invalid phone')) {
           errorMsg = 'Invalid phone number format. Please check and try again.';
+        } else if (e.toString().contains('Unable to deliver SMS') || e.toString().contains('30008')) {
+          errorMsg = 'Unable to deliver SMS to this number. Please check your phone number or contact support.';
+        } else if (e.toString().contains('Unable to send SMS')) {
+          errorMsg = 'Unable to send SMS. Please try again later.';
         } else if (e.toString().contains('No Internet Connection') || e.toString().contains('Connection Timeout')) {
           errorMsg = e.toString();
         }
