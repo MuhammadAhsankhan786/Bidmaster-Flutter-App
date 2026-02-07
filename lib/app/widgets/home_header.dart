@@ -226,14 +226,10 @@ class _HomeHeaderState extends State<HomeHeader> {
                 },
                 child: Row(
                   children: [
-                      Text(
-                        'IRAQ BID', // Hardcoded as per request
-                        style: TextStyle(
-                          fontSize: 20, // Slightly larger for emphasis since image is gone
-                          fontWeight: FontWeight.w900,
-                          color: isDark ? Colors.white : Colors.black, // White in dark mode, Black in light mode
-                          letterSpacing: 1.0,
-                        ),
+                      Image.asset(
+                        'assets/images/iraq_bid_header_logo.png',
+                        height: 35,
+                        fit: BoxFit.contain,
                       ),
                   ],
                 ),

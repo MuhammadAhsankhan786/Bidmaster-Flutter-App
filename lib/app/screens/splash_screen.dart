@@ -114,16 +114,14 @@ class _SplashScreenState extends State<SplashScreen>
                   child: Transform.rotate(
                     angle: _rotateAnimation.value * 3.14159 / 180,
                       child: Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          color: _primary,
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        child: const Icon(
-                          Icons.gavel,
-                          size: 60,
-                          color: Colors.white,
+                        width: 150, // Increased size for the new logo
+                        height: 150,
+                        alignment: Alignment.center,
+                        child: Image.asset(
+                          'assets/images/iraq_bid_logo.png',
+                          width: 150,
+                          height: 150,
+                          fit: BoxFit.contain,
                         ),
                       ),
                   ),
@@ -141,13 +139,14 @@ class _SplashScreenState extends State<SplashScreen>
                   opacity: _opacityAnimation.value,
                   child: Column(
                     children: [
-                      Text(
+                        // Text removed as logo contains it
+                        /* Text(
                         'IRAQ BID',
                         style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                              color: Colors.black, // Explicitly black as per previous preference
-                              fontWeight: FontWeight.w900, // Make it bolder to match header style
+                              color: Colors.black,
+                              fontWeight: FontWeight.w900,
                             ),
-                      ),
+                      ), */
                       const SizedBox(height: 4),
                       Text(
                         'Win. Sell. Succeed.',

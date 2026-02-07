@@ -709,30 +709,16 @@ class _AuthScreenState extends State<AuthScreen> {
               // Logo & Header
               Column(
                 children: [
-                  Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: colorScheme.primary.withOpacity(0.3),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      Icons.gavel,
-                      size: 50,
-                      color: colorScheme.onPrimary,
-                    ),
+                  Image.asset(
+                    'assets/images/iraq_bid_logo.png',
+                    width: 120,
+                    height: 120,
+                    fit: BoxFit.contain,
                   ),
                   const SizedBox(height: 24),
                   Text(
                     _currentStep == 0
-                        ? (AppLocalizations.of(context)?.welcome ?? 'Welcome to IRAQ BID')
+                        ? (AppLocalizations.of(context)?.welcome ?? 'Welcome')
                         : (AppLocalizations.of(context)?.verifyPhone ?? 'Verify Your Phone'),
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.bold,
