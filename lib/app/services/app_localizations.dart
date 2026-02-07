@@ -50,7 +50,7 @@ class AppLocalizations {
   String get mobiles => _localizedValues[locale.languageCode]?['mobiles'] ?? 'Mobiles';
   String get property => _localizedValues[locale.languageCode]?['property'] ?? 'Property';
   String get collectibles => _localizedValues[locale.languageCode]?['collectibles'] ?? 'Collectibles';
-  String get iraqiBid => _localizedValues[locale.languageCode]?['iraqiBid'] ?? 'IRAQI BID';
+  String get iraqiBid => _localizedValues[locale.languageCode]?['iraqiBid'] ?? 'IRAQ BID';
   
   // Helper method to translate category names
   String translateCategory(String categoryName) {
@@ -251,7 +251,7 @@ class AppLocalizations {
       'mobiles': 'Mobiles',
       'property': 'Property',
       'collectibles': 'Collectibles',
-      'iraqiBid': 'IRAQI BID',
+      'iraqiBid': 'IRAQ BID',
       'english': 'English',
       'property': 'Property',
       'search': 'Search',
@@ -334,7 +334,7 @@ class AppLocalizations {
       'mobiles': 'جوالات',
       'property': 'عقارات',
       'collectibles': 'المقتنيات',
-      'iraqiBid': 'مزاد العراقي',
+      'iraqiBid': 'Iraq Bid',
       'english': 'الإنجليزية',
       'search': 'بحث',
       'myBids': 'مزايداتي',
@@ -382,7 +382,7 @@ class AppLocalizations {
       'sellerProducts': 'منتجات البائع',
       'companyProducts': 'منتجات الشركة',
       'failedToSwitchRole': 'فشل تغيير الدور',
-      'iraqiBid': 'المزاد العراقي',
+      'iraqiBid': 'Iraq Bid',
       'addProduct': 'إضافة منتج',
       'searchHereProduct': 'ابحث عن المنتج هنا',
       'searchOutCategory': 'ابحث عن الفئة',
@@ -533,7 +533,7 @@ class AppLocalizations {
       'mobiles': 'مۆبایل',
       'property': 'موڵک',
       'collectibles': 'کەلوپەلە کۆنەکان',
-      'iraqiBid': 'مەزادی عێراقی',
+      'iraqiBid': 'Iraq Bid',
       'english': 'ئینگلیزی',
       'search': 'گەڕان',
       'myBids': 'مزایندەکانم',

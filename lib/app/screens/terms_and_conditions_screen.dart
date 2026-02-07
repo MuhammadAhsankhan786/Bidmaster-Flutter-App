@@ -46,7 +46,7 @@ class TermsAndConditionsScreen extends StatelessWidget {
               _buildSection(
                 context,
                 '1. Acceptance of Terms',
-                'By accessing and using IraQi Bid mobile application, you accept and agree to be bound by the terms and conditions of this agreement. If you do not agree to these terms, please do not use our services.',
+                'By accessing and using Iraq Bid mobile application, you accept and agree to be bound by the terms and conditions of this agreement. If you do not agree to these terms, please do not use our services.',
                 isDark,
               ),
               
@@ -102,7 +102,7 @@ class TermsAndConditionsScreen extends StatelessWidget {
               _buildSection(
                 context,
                 '9. Limitation of Liability',
-                'To the maximum extent permitted by law, IraQi Bid shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of or inability to use the service.',
+                'To the maximum extent permitted by law, Iraq Bid shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of or inability to use the service.',
                 isDark,
               ),
               
@@ -116,7 +116,7 @@ class TermsAndConditionsScreen extends StatelessWidget {
               _buildSection(
                 context,
                 '11. Contact Information',
-                'If you have any questions about these Terms and Conditions, please contact us through the app or via email at support@iraqibid.com.',
+                'If you have any questions about these Terms and Conditions, please contact us through the app or via email at support@iraqbid.com.',
                 isDark,
               ),
               

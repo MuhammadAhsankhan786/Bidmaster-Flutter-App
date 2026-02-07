@@ -219,7 +219,7 @@ class _HomeHeaderState extends State<HomeHeader> {
               
               const SizedBox(width: 8),
               
-              // Logo (Iraqi Bid text + icon)
+              // Logo (Iraq Bid text + icon)
               GestureDetector(
                 onTap: () {
                   context.go('/home');

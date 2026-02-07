@@ -709,37 +709,30 @@ class _AuthScreenState extends State<AuthScreen> {
               // Logo & Header
               Column(
                 children: [
-                  Image.asset(
-                    'assets/images/bid-logo.jpeg',
+                  Container(
                     width: 100,
                     height: 100,
-                    fit: BoxFit.contain,
-                    cacheWidth: 200, // Cache at higher resolution
-                    errorBuilder: (context, error, stackTrace) {
-                      // Fallback to icon if image not found
-                      if (kDebugMode) {
-                        print('❌ Logo not found: assets/images/bid-logo.jpeg');
-                        print('   Error: $error');
-                      }
-                      return Container(
-                        width: 100,
-                        height: 100,
-                        decoration: BoxDecoration(
-                          color: colorScheme.primary,
-                          borderRadius: BorderRadius.circular(12),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: colorScheme.primary.withOpacity(0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
                         ),
-                        child: Icon(
-                          Icons.gavel,
-                          size: 50,
-                          color: colorScheme.onPrimary,
-                        ),
-                      );
-                    },
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.gavel,
+                      size: 50,
+                      color: colorScheme.onPrimary,
+                    ),
                   ),
                   const SizedBox(height: 24),
                   Text(
                     _currentStep == 0
-                        ? (AppLocalizations.of(context)?.welcome ?? 'Welcome to IQ BidMaster')
+                        ? (AppLocalizations.of(context)?.welcome ?? 'Welcome to IRAQ BID')
                         : (AppLocalizations.of(context)?.verifyPhone ?? 'Verify Your Phone'),
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.bold,

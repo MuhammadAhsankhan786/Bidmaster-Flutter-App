@@ -116,7 +116,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
               _buildSection(
                 context,
                 '11. Contact Us',
-                'If you have any questions about this Privacy Policy, please contact us:\n\nEmail: privacy@iraqibid.com\nPhone: Support through app',
+                'If you have any questions about this Privacy Policy, please contact us:\n\nEmail: privacy@iraqbid.com\nPhone: Support through app',
                 isDark,
               ),
               

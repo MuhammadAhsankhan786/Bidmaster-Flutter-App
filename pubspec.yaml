@@ -54,7 +54,7 @@ flutter:
         - asset: assets/fonts/Poppins-SemiBold.ttf
         - asset: assets/fonts/Poppins-Bold.ttf
 
-# App Icon Configuration - Uses IRAQI BID logo from assets
+# App Icon Configuration - Uses IRAQ BID logo from assets
 flutter_launcher_icons:
   android: true
   ios: true

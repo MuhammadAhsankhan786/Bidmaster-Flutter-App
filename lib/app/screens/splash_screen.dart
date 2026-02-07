@@ -113,45 +113,19 @@ class _SplashScreenState extends State<SplashScreen>
                   scale: _scaleAnimation.value,
                   child: Transform.rotate(
                     angle: _rotateAnimation.value * 3.14159 / 180,
-                    child: Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.06),
-                            blurRadius: 16,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: Image.asset(
-                          'assets/images/bid-logo.jpeg',
-                          width: 120,
-                          height: 120,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) {
-                            // Fallback to a simple container if image not found
-                            return Container(
-                              width: 120,
-                              height: 120,
-                              decoration: BoxDecoration(
-                                color: _primary,
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                              child: const Icon(
-                                Icons.gavel,
-                                size: 48,
-                                color: Colors.white,
-                              ),
-                            );
-                          },
+                      child: Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          color: _primary,
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: const Icon(
+                          Icons.gavel,
+                          size: 60,
+                          color: Colors.white,
                         ),
                       ),
-                    ),
                   ),
                 );
               },
