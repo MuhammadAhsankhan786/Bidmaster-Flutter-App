@@ -228,7 +228,7 @@ class _HomeHeaderState extends State<HomeHeader> {
                   children: [
                       Image.asset(
                         'assets/images/iraq_bid_header_logo.png',
-                        height: 35,
+                        height: 52,
                         fit: BoxFit.contain,
                       ),
                   ],

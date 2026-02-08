@@ -767,14 +767,6 @@ class _BottomNavBar extends StatelessWidget {
                   context.push('/wins');
                 },
               ),
-              _BottomNavItem(
-                icon: Icons.notifications_outlined,
-                label: AppLocalizations.of(context)?.notification ?? 'Notification',
-                isActive: currentRoute == '/notifications',
-                onTap: () {
-                  context.push('/notifications');
-                },
-              ),
             ],
           ),
         ),
